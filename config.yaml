@@ -1,0 +1,59 @@
+# Paper Analyzer Configuration
+# 이 파일의 값을 바꿀 때는 반드시 HANDOFF.md와 CLAUDE.md를 먼저 확인할 것.
+
+# 목표 독자 수준 (expander 시스템 프롬프트 및 leaf 판정 기준)
+target_audience:
+  level: "대학 1학년"
+  background_knowledge:
+    - "고등학교 수학2 (미적분 기초)"
+    - "고등학교 물리1"
+    - "기초 프로그래밍"
+  exclude_knowledge:
+    - "선형대수"
+    - "확률론"
+    - "머신러닝"
+    - "딥러닝"
+
+# 트리 확장 제어 (비용 방어의 핵심)
+expansion:
+  max_depth: 4              # 실험적으로 4부터 시작. 품질 부족 시 5~6으로 상향 검토.
+  max_children_per_node: 5  # 한 노드가 요구할 수 있는 최대 하위 개념 수
+
+# 중복 차단
+dedup:
+  similarity_threshold: 0.88
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+# 자기검증
+verification:
+  max_retries: 1            # 검증 실패 시 재생성 1회만. 호출 수 폭발 방지.
+  min_confidence: 0.7       # 이 이상이어야 통과. 너무 높이면 재생성 증가.
+  check_types:
+    - "hallucination"
+    - "omission"
+    - "contradiction"
+    - "math_error"
+
+# Claude CLI 호출 설정
+claude:
+  cli_path: "claude"
+  mode: "cache"             # live | cache | dry_run
+                            # cache: 프롬프트 SHA-256 해시로 디스크 캐시. 디버깅 중 기본값.
+                            # live: 실제 claude -p 호출. 최종 실행용.
+                            # dry_run: 실제 호출 없이 스키마 기본값 반환. 파이프라인 검증용.
+  max_total_calls: 500      # 한 번 실행 동안 호출 상한. 무한 루프 방어.
+  timeout_seconds: 600      # 단일 호출 타임아웃
+  sleep_between_calls: 3    # 호출 간 대기(초). 속도 제한 완화.
+
+# 캐시 해시 정책 (claude_client.py가 참조)
+# 해시 입력: system_prompt + user_prompt + json.dumps(schema, sort_keys=True) + CLAUDE_CLIENT_VERSION
+# 해시 알고리즘: SHA-256
+# 캐시 파일 경로: data/cache/claude_responses/<sha256>.json
+# CLAUDE_CLIENT_VERSION은 claude_client.py 상단의 상수. 프롬프트 템플릿/스키마 수정 시 +1로 일괄 무효화.
+
+# 파일 경로
+paths:
+  pdf_input: "data/papers"
+  cache_dir: "data/cache"
+  output_dir: "data/output"
+  checkpoints_dir: "checkpoints"

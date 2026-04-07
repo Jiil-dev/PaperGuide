@@ -1,0 +1,20 @@
+# PDF parsing with layout and structure preservation
+pymupdf4llm>=0.0.17
+
+# Sentence embeddings for duplicate detection via cosine similarity
+sentence-transformers>=2.7.0
+
+# Numerical operations for embedding similarity computation
+numpy>=1.26
+
+# YAML configuration file parsing
+pyyaml>=6.0
+
+# Retry logic with exponential backoff for Claude CLI calls
+tenacity>=8.2
+
+# Rich terminal output for logging and progress bars
+rich>=13.7
+
+# Data validation and schema enforcement (Pydantic v2)
+pydantic>=2.6

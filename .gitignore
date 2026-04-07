@@ -1,0 +1,42 @@
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.Python
+build/
+dist/
+
+# ===== 가상환경 =====
+.venv/
+venv/
+env/
+
+# ===== 프로젝트 데이터 (용량 크고 재생성 가능) =====
+data/papers/
+data/output/
+data/cache/
+checkpoints/
+
+# ===== 에디터/IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 환경 변수/시크릿 =====
+.env
+.env.local
+.env.*.local
+
+# ===== 로그 =====
+*.log
+logs/

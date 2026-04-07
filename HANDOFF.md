@@ -147,6 +147,35 @@ explanation이 반드시 지켜야 할 규칙:
 
 3. **이 규칙들을 expander의 system_prompt에 명시적으로 포함**.
 
+### 3-7. Phase 2 완료 상태 (2026-04-08)
+
+**12/12 모듈 완성**:
+1. config.py — Pydantic 설정 로더
+2. tree.py — ConceptNode dataclass + DFS 헬퍼
+3. pdf_parser.py — PDF → Markdown (pymupdf4llm)
+4. arxiv_parser.py — LaTeX 소스 → Markdown (수식 보존)
+5. chunker.py — Markdown → ConceptNode 계층 트리
+6. concept_cache.py — 3단계 중복/순환 차단
+7. claude_client.py — subprocess 기반 claude -p 래퍼
+8. verifier.py — 4축 검증 (원문/수준/자기충족/수식)
+9. expander.py — DFS 재귀 확장 + 재시도
+10. checkpoint.py — JSON 직렬화/재개
+11. assembler.py — Markdown 가이드북 렌더러
+12. main.py — CLI 진입점 + 오케스트레이션
+
+**End-to-end 검증 (2026-04-08)**:
+- 입력: data/papers/attention_mini/ (Abstract + Introduction만, 2.7KB)
+- 모드: cache
+- 제한: max_depth=2, max_children=3, max_total_calls=15 → 초과 후 200으로 --resume
+- 결과: 22 노드 전부 처리 (done 21, duplicate 1), 20KB 한국어 가이드북 생성
+- 검증: concept_cache 임베딩 dedup, --resume 재개, 수식 보존, 계층 구조 전부 확인
+
+**알려진 개선 여지 (향후)**:
+1. depth=max_depth 노드의 explanation이 빈 문자열 → assembler에서 플레이스홀더 렌더링 또는 expander에서 간단한 설명 생성
+2. Abstract가 과도하게 확장되는 경향 → expander system_prompt에 "Abstract는 요약이므로 is_leaf=True 우선 고려" 추가
+3. 비슷한 concept의 임베딩 유사도가 threshold 이하로 떨어지는 경우 중복 미감지 → 실제 논문 돌려보며 threshold 튜닝 (현재 0.88)
+4. arxiv_parser의 \href, \newcommand 미지원 (HANDOFF.md 3-5 "알려진 한계" 참조)
+
 ## 4. 모듈 설계 요약 (각 파일의 책임)
 
 - `config.py`: YAML 로드, Pydantic v2 검증, 경로 자동 생성

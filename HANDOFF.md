@@ -76,6 +76,35 @@
 - 선형대수/확률/머신러닝/딥러닝 전혀 모름
 - 이 기준을 expander의 시스템 프롬프트와 leaf 판정 규칙에 반영
 
+### 3-5. 입력 파서 전략
+
+입력 파서는 두 가지 모듈로 분리된다:
+
+**(1) pdf_parser.py** — 일반 PDF 입력 처리
+- 사용 라이브러리: `pymupdf4llm`
+- 용도: 수식이 적은 텍스트 중심 논문, 블로그, 리포트
+- 한계: 수식이 PDF 내부에서 이미지/벡터 그래픽으로 렌더링된 경우,
+  `**==> picture [W x H] intentionally omitted <==**` placeholder로 누락됨
+- 2026-04-08 distillation.pdf (9페이지, 수식 거의 없음)에서 정상 동작 확인
+- 2026-04-08 attention.pdf (15페이지, 수식 밀집)에서 핵심 수식 누락 확인
+
+**(2) arxiv_parser.py** — arXiv TeX 소스 입력 처리 (미구현)
+- 사용: 표준 라이브러리 (정규식 기반)
+- 용도: arXiv에 올라온 AI 논문 (주 입력 경로)
+- 입력: 디렉터리 경로 (압축 해제된 .tex 파일 모음)
+- 수식 보존: LaTeX 원본 그대로 유지 (완벽)
+- 2026-04-08 Attention Is All You Need (arXiv 1706.03762) 소스로 검증:
+  `\mathrm{Attention}(Q,K,V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V` 확인
+
+**입력 형식 판정 (main.py가 수행):**
+- 경로가 `.pdf`로 끝나면 → pdf_parser 호출
+- 경로가 디렉터리이면 → arxiv_parser 호출
+
+**테스트 데이터 위치 (git 추적 안 됨):**
+- `data/papers/distillation.pdf` — pdf_parser 테스트용
+- `data/papers/attention/` — arxiv_parser 테스트용 (arXiv 1706.03762 TeX 소스)
+- 다른 머신에서 재현 시 이 두 파일을 수동으로 받아서 같은 위치에 배치.
+
 ## 4. 모듈 설계 요약 (각 파일의 책임)
 
 - `config.py`: YAML 로드, Pydantic v2 검증, 경로 자동 생성

@@ -11,7 +11,7 @@ _SYSTEM_PROMPT = """\
 주어진 '설명(explanation)'이 '원문(source_excerpt)'을 기반으로 정확하고,
 목표 독자 수준에 적합한지 엄격하게 판정하십시오.
 
-검증 항목 4가지를 모두 적용합니다:
+검증 항목 6가지를 모두 적용합니다:
 
 1. **원문 충실성(faithfulness)**: 설명이 원문의 내용을 왜곡하거나,
    원문에 없는 정보를 지어내지 않았는가?
@@ -25,10 +25,29 @@ _SYSTEM_PROMPT = """\
    원문의 수식과 정확히 일치하는가? 변수명, 연산, 첨자 오류가 없는가?
    수식이 없는 경우 이 항목은 자동 통과.
 
+### 5. paper_centric (논문 중심성)
+해설이 논문 저자의 관점에서 쓰였는가를 평가한다.
+
+판단 기준:
+- 좋음: "저자는 RNN의 순차 계산 문제를 지적한다", "저자는 Multi-Head Attention을 선택했다"
+- 나쁨: "RNN은 일반적으로 이런 구조다", "Attention mechanism은 보통 이렇게 동작한다"
+
+해설이 "이 논문" 이 아니라 "이 분야 일반" 을 설명하고 있다면 이 축에서 낮은 점수.
+
+### 6. flow (흐름 유지)
+본문 흐름이 기초 지식으로 끊기지 않았는가를 평가한다.
+
+판단 기준:
+- 좋음: 기초 개념이 한 줄 괄호 병기나 [[REF:...]] 플레이스홀더로만 등장
+- 나쁨: "벡터 내적이란 ~이고, 이것의 기하학적 의미는 ~이며..." 식으로 여러 문단이 본문에 박힘
+
+본문에 기초 지식이 여러 문단에 걸쳐 설명되어 있다면 이 축에서 낮은 점수.
+
 판정 기준:
-- 4가지 항목 모두 통과해야 passed=true.
+- 6가지 항목 모두 통과해야 passed=true.
 - 하나라도 문제가 있으면 passed=false이고 errors에 해당 항목을 기록.
 - confidence는 0.0~1.0. 설명의 전반적 품질에 대한 확신도.
+- paper_centric과 flow는 각각 1~5 점 스케일로 별도 보고.
 
 반드시 지정된 JSON 형식으로만 응답하십시오.\
 """
@@ -48,8 +67,8 @@ _USER_PROMPT_TEMPLATE = """\
 ## 목표 독자 수준
 {target_level}
 
-위 4가지 검증 항목(원문 충실성, 수준 적절성, 자기충족성, 수식 정확성)을
-적용하여 판정 결과를 JSON으로 반환하세요.\
+위 6가지 검증 항목(원문 충실성, 수준 적절성, 자기충족성, 수식 정확성,
+논문 중심성, 흐름 유지)을 적용하여 판정 결과를 JSON으로 반환하세요.\
 """
 
 _VERIFY_SCHEMA = {
@@ -86,20 +105,36 @@ _VERIFY_SCHEMA = {
             },
             "description": "발견된 오류 리스트. 통과 시 빈 배열.",
         },
+        "paper_centric": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                "reason": {"type": "string"},
+            },
+            "required": ["score", "reason"],
+        },
+        "flow": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                "reason": {"type": "string"},
+            },
+            "required": ["score", "reason"],
+        },
         "notes": {
             "type": "string",
             "description": "추가 코멘트 (자유 형식)",
         },
     },
-    "required": ["passed", "confidence", "errors", "notes"],
+    "required": ["passed", "confidence", "errors", "paper_centric", "flow", "notes"],
 }
 
 
 class Verifier:
     """검증기.
 
-    ConceptNode의 explanation을 4가지 항목으로 검증:
-    원문 충실성, 수준 적절성, 자기충족성, 수식 정확성.
+    ConceptNode의 explanation을 6가지 항목으로 검증:
+    원문 충실성, 수준 적절성, 자기충족성, 수식 정확성, 논문 중심성, 흐름 유지.
     """
 
     def __init__(self, client: ClaudeClient, min_confidence: float = 0.7):
@@ -137,6 +172,8 @@ class Verifier:
         passed = result.get("passed", False)
         confidence = result.get("confidence", 0.0)
         errors = result.get("errors", [])
+        paper_centric = result.get("paper_centric", {"score": 0, "reason": ""})
+        flow = result.get("flow", {"score": 0, "reason": ""})
         notes = result.get("notes", "")
 
         passed_final = passed and (confidence >= self._min_confidence)
@@ -145,6 +182,8 @@ class Verifier:
             "passed": passed,
             "confidence": confidence,
             "errors": errors,
+            "paper_centric": paper_centric,
+            "flow": flow,
             "notes": notes,
             "passed_final": passed_final,
         }

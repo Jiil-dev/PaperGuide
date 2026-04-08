@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from src.data_types import PaperAnalysis, PrerequisiteEntry
 from src.tree import ConceptNode, build_id_map
 
 
@@ -179,3 +180,97 @@ def _render_status(
 
     else:  # pending
         return "> [미완료] 이 섹션은 아직 생성되지 않았습니다."
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: 3-Part 가이드북 조립
+# ---------------------------------------------------------------------------
+
+
+def assemble_3part_guidebook(
+    analysis: PaperAnalysis,
+    part2_trees: list[ConceptNode],
+    part3_entries: list[PrerequisiteEntry],
+) -> str:
+    """3-Part 가이드북 Markdown 생성.
+
+    Args:
+        analysis: paper_analyzer 출력.
+        part2_trees: expander 출력 (각 섹션의 루트 노드 리스트).
+        part3_entries: part3_writer 출력 리스트.
+
+    Returns:
+        완성된 가이드북 Markdown 문자열.
+    """
+    from src.ref_resolver import resolve_refs
+
+    # Step 1: Part 2 의 [[REF:...]] 를 Part 3 링크로 치환
+    resolve_refs(part2_trees, part3_entries)
+
+    lines: list[str] = []
+
+    # 제목
+    lines.append(f"# {analysis.title} — 완전판 가이드북\n")
+
+    # Part 1
+    lines.append("## Part 1. 논문이 무엇을 주장하는가 — 큰 그림\n")
+
+    lines.append("### 1.1 핵심 주장\n")
+    lines.append(analysis.core_thesis + "\n")
+
+    lines.append("### 1.2 해결하려는 문제\n")
+    lines.append(analysis.problem_statement + "\n")
+
+    lines.append("### 1.3 핵심 기여\n")
+    for c in analysis.key_contributions:
+        lines.append(f"- {c}")
+    lines.append("")
+
+    lines.append("### 1.4 주요 결과\n")
+    for r in analysis.main_results:
+        lines.append(f"- {r}")
+    lines.append("")
+
+    lines.append("### 1.5 이 논문의 의의\n")
+    lines.append(analysis.significance + "\n")
+
+    lines.append("### 1.6 이 가이드북 읽는 법\n")
+    lines.append(analysis.reading_guide + "\n")
+
+    # Part 2
+    lines.append("## Part 2. 논문 따라 읽기 — 완전 해설\n")
+
+    for idx, root in enumerate(part2_trees, start=1):
+        section_num = f"2.{idx}"
+        _render_part2_node(lines, root, section_num, depth=0)
+
+    # Part 3
+    if part3_entries:
+        lines.append("## Part 3. 기초 지식 탄탄히\n")
+        for entry in part3_entries:
+            _render_part3_entry(lines, entry)
+
+    return "\n".join(lines)
+
+
+def _render_part2_node(lines: list[str], node: ConceptNode, section_num: str, depth: int) -> None:
+    """Part 2 노드를 재귀적으로 Markdown 으로 렌더링."""
+    heading_level = "#" * (3 + depth)  # ### for depth=0, #### for depth=1, ...
+    lines.append(f"{heading_level} {section_num} {node.concept}\n")
+
+    if node.explanation:
+        lines.append(node.explanation + "\n")
+
+    for child_idx, child in enumerate(node.children, start=1):
+        child_section = f"{section_num}.{child_idx}"
+        _render_part2_node(lines, child, child_section, depth + 1)
+
+
+def _render_part3_entry(lines: list[str], entry: PrerequisiteEntry) -> None:
+    """Part 3 항목 렌더링."""
+    lines.append(f"### {entry.section_number} {entry.topic.title}\n")
+
+    for idx, sub in enumerate(entry.subsections, start=1):
+        sub_num = f"{entry.section_number}.{idx}"
+        lines.append(f"#### {sub_num} {sub.concept}\n")
+        lines.append(sub.explanation + "\n")

@@ -1,4 +1,4 @@
-# 단일 책임: PrerequisiteTopic 하나를 받아 Part 3 항목을 생성
+# 단일 책임: PrerequisiteTopic 하나를 받아 Part 3 항목(PrerequisiteEntry)을 생성한다.
 from __future__ import annotations
 
 from src.claude_client import ClaudeClient
@@ -130,7 +130,7 @@ def write_part3_topic(
 
     # ConceptNode 리스트로 변환
     subsection_nodes: list[ConceptNode] = []
-    for idx, sub in enumerate(subsections_data):
+    for sub in subsections_data:
         concept = sub.get("concept", "").strip()
         explanation = sub.get("explanation", "").strip()
         if not concept or not explanation:
@@ -145,6 +145,7 @@ def write_part3_topic(
         )
         subsection_nodes.append(node)
 
+    # intro 와 connection_to_paper 를 첫/마지막 subsection 에 합치기
     intro = result.get("intro", "").strip()
     connection = result.get("connection_to_paper", "").strip()
 

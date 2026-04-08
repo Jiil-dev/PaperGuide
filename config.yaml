@@ -41,7 +41,7 @@ claude:
                             # cache: 프롬프트 SHA-256 해시로 디스크 캐시. 디버깅 중 기본값.
                             # live: 실제 claude -p 호출. 최종 실행용.
                             # dry_run: 실제 호출 없이 스키마 기본값 반환. 파이프라인 검증용.
-  max_total_calls: 500      # 한 번 실행 동안 호출 상한. 무한 루프 방어.
+  max_total_calls: 1500     # Phase 3: 10~15x quota for 3-Part generation
   timeout_seconds: 600      # 단일 호출 타임아웃
   sleep_between_calls: 3    # 호출 간 대기(초). 속도 제한 완화.
 
@@ -57,3 +57,41 @@ paths:
   cache_dir: "data/cache"
   output_dir: "data/output"
   checkpoints_dir: "checkpoints"
+
+# === Phase 3 신규 섹션 ===
+
+part1:
+  max_key_contributions: 4
+  max_main_results: 5
+
+part2:
+  max_depth: 4                # 섹션 내 최대 세부 단계
+  max_children_per_node: 5    # 한 노드의 최대 하위 논점 수
+  use_placeholders: true      # 기초 지식 플레이스홀더 사용
+
+part3:
+  min_topics: 5               # 최소 주제 수
+  max_topics: 15              # 최대 주제 수
+  subsections_per_topic: 6    # 주제당 평균 하위 항목 수
+  allow_claude_to_add: true   # Claude가 사전 풀에 없는 주제 추가 허용
+  predefined_pool:
+    - id: "neural_network_basics"
+      title: "신경망의 기초"
+    - id: "vector_dot_product"
+      title: "벡터와 내적"
+    - id: "matrix_multiplication"
+      title: "행렬 곱셈"
+    - id: "softmax"
+      title: "softmax 함수"
+    - id: "rnn_lstm_gru"
+      title: "RNN, LSTM, GRU"
+    - id: "cnn_basics"
+      title: "CNN의 기초"
+    - id: "encoder_decoder"
+      title: "Encoder-Decoder 패러다임"
+    - id: "attention_history"
+      title: "Attention 메커니즘의 역사"
+    - id: "optimization_basics"
+      title: "최적화 기법"
+    - id: "regularization"
+      title: "Regularization 기법"

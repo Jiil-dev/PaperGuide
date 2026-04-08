@@ -59,6 +59,42 @@ class Claude(BaseModel):
     sleep_between_calls: int = Field(default=3, ge=0)
 
 
+class Part1Config(BaseModel):
+    """Part 1 생성 제어"""
+    model_config = ConfigDict(extra="forbid")
+
+    max_key_contributions: int = 4
+    max_main_results: int = 5
+
+
+class Part2Config(BaseModel):
+    """Part 2 생성 제어"""
+    model_config = ConfigDict(extra="forbid")
+
+    max_depth: int = 4
+    max_children_per_node: int = 5
+    use_placeholders: bool = True
+
+
+class PrerequisitePoolItem(BaseModel):
+    """Part 3 사전 정의 주제 항목"""
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+
+
+class Part3Config(BaseModel):
+    """Part 3 생성 제어"""
+    model_config = ConfigDict(extra="forbid")
+
+    min_topics: int = 5
+    max_topics: int = 15
+    subsections_per_topic: int = 6
+    allow_claude_to_add: bool = True
+    predefined_pool: list[PrerequisitePoolItem] = Field(default_factory=list)
+
+
 class Paths(BaseModel):
     """파일 경로 설정
     
@@ -85,6 +121,9 @@ class Config(BaseModel):
     dedup: Dedup
     verification: Verification
     claude: Claude
+    part1: Part1Config = Field(default_factory=Part1Config)
+    part2: Part2Config = Field(default_factory=Part2Config)
+    part3: Part3Config = Field(default_factory=Part3Config)
     paths: Paths
 
 

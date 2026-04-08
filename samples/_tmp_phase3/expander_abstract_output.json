@@ -1,0 +1,5 @@
+{
+  "note": "expander abstract 결과는 end-to-end 테스트 출력에 포함됨",
+  "e2e_output": "samples/_tmp_phase3/end_to_end_attention_mini.md",
+  "abstract_section_chars": 18
+}

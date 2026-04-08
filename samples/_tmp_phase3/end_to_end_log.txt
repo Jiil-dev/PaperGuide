@@ -1,0 +1,167 @@
+Paper Analyzer — phase=3
+[1/7] 입력 파싱: /home/engineer/j0061/paper-analyzer/data/papers/attention_mini
+       파싱 완료: 2723 chars
+[2/7] 논문 분석 (Part 1)...
+       제목: Attention Is All You Need
+[3/7] 섹션 분할...
+       2 섹션
+[4/7] 섹션 확장 (Part 2, top-down)...
+   depth=0 Abstract
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8036.26it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+   depth=0 Introduction
+   depth=1 순환 모델의 지배적 위치와 순차 연산 병목
+   depth=2 RNN 계열의 지배적 위치
+   depth=3 시퀀스 과제에서의 표준 지위
+   depth=4 적용 과제 범위
+   depth=4 RNN/LSTM/GRU의 지배적 위상 인정
+   depth=4 논증 구조상의 역할
+   depth=3 순차적 계산의 병렬화 제약
+   depth=4 은닉 상태의 순차적 의존성
+   depth=4 GPU 병렬 처리 불가
+   depth=4 긴 시퀀스에서의 학습 병목
+   depth=3 장거리 의존성 학습의 곤란
+   depth=4 순차적 경로 길이 문제
+   depth=4 기울기 소실과 학습 신호 약화
+   depth=4 LSTM/GRU 게이트의 한계 인정
+   depth=4 Self-Attention 도입의 동기 연결
+   depth=3 기존 개선 시도의 한계 언급
+   depth=4 Factorization trick의 한계
+   depth=4 Conditional computation의 한계
+   depth=4 순차적 계산이라는 근본 제약
+   depth=4 Transformer 제안을 위한 논리적 포석
+   depth=2 h_t → h_{t-1} 순차 의존 구조
+   depth=3 은닉 상태의 재귀적 계산 구조
+   depth=3 병렬화 불가능성
+   depth=3 시퀀스 길이와 학습 시간의 선형 관계
+   depth=4 최소 n번 순차 연산의 불가피성
+   depth=4 학습·추론 시간의 선형 증가
+   depth=4 실질적 병목으로서의 문제 규정
+   depth=3 기존 개선 시도의 한계
+   depth=4 Factorization trick의 한계
+   depth=4 Conditional computation의 한계
+   depth=4 근본적 순차 의존의 잔존
+   depth=2 병렬화 불가로 인한 학습 속도 한계
+   depth=2 긴 시퀀스에서의 메모리 제약
+   depth=1 기존 효율성 개선 시도의 근본적 한계
+   depth=2 인수분해 기법의 기여와 한계
+   depth=2 조건부 연산의 기여와 한계
+   depth=3 조건부 연산의 메커니즘
+   depth=3 연산량 효율 개선 인정
+   depth=3 직렬 구조의 잔존 문제
+   depth=4 순차 의존성의 본질
+   depth=4 조건부 연산의 한계
+   depth=4 시퀀스 길이와 병렬화 불가 구간의 비례
+   depth=4 Transformer 동기 설정
+   depth=3 병렬화 불가라는 근본 병목
+   depth=2 순차 연산이라는 근본 병목
+   depth=2 병렬화 불가가 초래하는 실질적 문제
+   depth=1 어텐션 메커니즘의 잠재력과 순환 종속 문제
+   depth=2 어텐션의 거리 무관 의존성 모델링 능력
+   depth=3 RNN과의 경로 길이 비교
+   depth=4 RNN의 순차 처리와 O(n) 경로 길이
+   depth=4 장거리 의존성 학습의 어려움
+   depth=4 Self-Attention과의 암묵적 대비
+   depth=3 CNN과의 경로 길이 비교
+   depth=4 커널의 제한된 수용 범위
+   depth=4 일반 CNN의 O(n/k) 층 요구
+   depth=4 Dilated CNN의 O(log_k(n)) 층 요구
+   depth=4 Self-attention O(1)과의 대비
+   depth=3 셀프 어텐션의 O(1) 경로 길이
+   depth=4 경로 길이의 정의와 의미
+   depth=4 RNN·CNN 대비 O(1)의 우위
+   depth=4 모든 위치 쌍의 직접 연결
+   depth=4 그래디언트 전파와 학습 용이성
+   depth=3 경로 길이와 학습 용이성의 관계
+   depth=4 짧은 경로 = 쉬운 학습이라는 전제
+   depth=4 셀프 어텐션의 경로 길이 O(1)
+   depth=4 셀프 어텐션 선택의 이론적 정당화
+   depth=2 순환 네트워크와의 결합이라는 기존 관행
+   depth=3 어텐션 강점의 전제
+   depth=3 거의 항상 결합이라는 관행
+   depth=3 독립 사용 부재에 대한 암묵적 문제 제기
+   depth=4 관행의 명시적 환기
+   depth=4 관습 vs 필연의 구분 유도
+   depth=4 후속 제안을 위한 논리적 교두보
+   depth=2 결합 관행에 대한 문제 제기
+   depth=1 Transformer 제안과 핵심 성과
+   depth=2 순환 구조 완전 제거 선언
+   depth=3 순환 구조의 순차적 병목 진단
+   depth=3 긴 시퀀스에서의 메모리·성능 한계
+   depth=4 RNN 은닉 상태의 장기 정보 소실
+   depth=4 LSTM·GRU 게이트의 불완전한 해결
+   depth=4 긴 시퀀스에서의 성능 한계 귀결
+   depth=3 기존 병렬화 시도의 한계 인정
+   depth=3 순환 제거라는 설계 결정의 선언
+   depth=2 어텐션 단독 의존성 포착
+   depth=2 훈련 효율성 강조
+   depth=3 구체적 하드웨어·시간 조건 명시
+   depth=4 GPU 종류·수량 특정
+   depth=4 훈련 소요 시간 명시
+   depth=4 재현 가능성 확보 의도
+   depth=3 기존 대비 훈련 비용 절감 주장
+   depth=3 비용 효율성을 모델 평가 기준으로 제시
+   depth=4 BLEU 단독 비교의 한계 지적
+   depth=4 FLOPs를 비용 정량화 수단으로 채택
+   depth=4 성능-비용 2차원 비교 프레임워크
+   depth=4 실용적 모델 선택 기준 제안
+   depth=2 번역 SOTA 달성
+   depth=3 EN-DE 번역 BLEU 결과
+   depth=4 28.4 BLEU 수치 보고
+   depth=4 앙상블 포함 전 모델 대비 2.0+ BLEU 초과
+   depth=4 해당 벤치마크 최고 성능 수립
+   depth=3 EN-FR 번역 BLEU 결과
+   depth=4 41.0 BLEU 단일 모델 최고 기록
+   depth=4 훈련 비용 1/4 이하
+   depth=4 성능-비용 동시 개선 논거
+   depth=3 훈련 비용 대비 성능 비교
+   depth=4 FLOPs 기반 공정 비교 기준
+   depth=4 경쟁 모델 대비 연산량 절감
+   depth=4 BLEU 점수의 동시 우위
+   depth=4 비용-성능 효율성 논증
+   depth=3 비교 대상 모델 선정
+   depth=4 RNN 기반 비교 모델 선정
+   depth=4 CNN 기반 비교 모델 선정
+   depth=4 앙상블 대 단일 모델 구분 비교
+   depth=4 아키텍처 유형별 공정 비교 의도
+       2 루트 노드
+[5/7] 기초 지식 주제 수집...
+       26 고유 주제
+[6/7] Part 3 작성...
+   3.1 신경망의 기초
+   3.2 벡터와 내적
+   3.3 행렬 곱셈
+   3.4 RNN, LSTM, GRU
+   3.5 CNN의 기초
+   3.6 Encoder-Decoder 패러다임
+   3.7 Attention 메커니즘의 역사
+   3.8 최적화 기법
+   3.9 Benchmark Evaluation
+   3.10 Big O Notation
+   3.11 Bleu Score
+   3.12 Conditional Computation
+   3.13 Dilated Convolution
+   3.14 Ensemble Methods
+   3.15 Factorization Trick
+   3.16 Floating Point Basics
+   3.17 Floating Point Operations
+   3.18 Flops
+   3.19 Gpu Hardware
+   3.20 Gpu Parallel Computing
+   3.21 Gpu Parallelism
+   3.22 Matrix Factorization
+   3.23 Parallel Computing
+   3.24 Parallel Computing Basics
+   3.25 Time Complexity Basics
+   3.26 Vanishing Gradient
+       26 항목
+[7/7] 3-Part 가이드북 조립...
+완료: samples/_tmp_phase3/end_to_end_attention_mini.md (172635 chars)
+통계: {'total_calls': 196, 'cache_hits': 1, 'cache_misses': 196, 
+'dry_run_calls': 0}

@@ -9,40 +9,69 @@ from src.tree import ConceptNode
 from src.verifier import Verifier
 
 _SYSTEM_PROMPT = """\
-당신은 AI 논문 해설서의 저자입니다.
-주어진 개념을 목표 독자가 완벽히 이해할 수 있도록 설명하십시오.
+당신은 AI 분야 학술 논문을 학부 1학년에게 해설하는 전문가입니다.
 
-## 목표 독자
-고등학교 수학2(미적분 기초), 물리1, 기초 프로그래밍을 이수한 대학교 1학년.
-선형대수, 확률론, 머신러닝, 딥러닝 지식은 전혀 없습니다.
+주어진 논문 섹션을 "저자의 관점에서" 해설하십시오.
+독자는 고등학교 수학 2, 물리 1, 기초 프로그래밍을 이수한 대학교 1학년입니다.
 
-## 작성 규칙
-1. **전문 용어 풀어쓰기**: 전문 용어가 처음 등장하면 반드시 괄호 안에
-   학부 1학년이 이해할 수 있는 풀이를 병기하십시오.
-   예: "softmax(각 값을 0~1 사이 확률로 변환하는 함수)"
+## 해설 원칙
 
-2. **원문 충실**: source_excerpt에 없는 정보를 지어내지 마십시오.
-   배경 지식이 필요하면 children에 별도 개념으로 분리하십시오.
+### 원칙 1 — top-down: 저자 중심
+"저자는 ~라고 주장한다", "저자는 ~를 선택했다", "저자가 이 섹션에서 하는 말은 ~이다"
+와 같이 저자의 시각에서 서술하십시오.
 
-3. **자기충족 설명**: 설명은 다른 섹션을 참조하지 않고 독립적으로
-   이해할 수 있어야 합니다.
+일반적인 교과서 설명 금지. 예시:
+- 나쁨: "RNN은 일반적으로 순차적으로 입력을 처리한다."
+- 좋음: "저자는 RNN이 순차적이라는 점이 병렬 처리를 막는다고 지적한다."
 
-4. **수식 보존**: 원문의 수식은 LaTeX 형식 그대로 유지하십시오.
+### 원칙 2 — 흐름 우선: 기초 지식 위임
+기초 개념 (선형대수, 확률론, 머신러닝 기초 등) 이 등장하면:
 
-5. **leaf 판정**: 이 개념이 목표 독자가 추가 설명 없이 바로 이해할 수
-   있는 수준이면 is_leaf=true로 판정하십시오.
+1. 본문에는 한 줄 괄호 병기만: "내적(두 벡터의 성분별 곱의 합)"
+2. 플레이스홀더 삽입: [[REF:topic_id]]
+3. 깊은 설명은 절대 금지 — Part 3 에서 따로 다룬다
 
-6. **children 생성**: is_leaf=false인 경우, 이 개념을 이해하기 위해
-   필요한 선행 개념을 children에 나열하십시오.
-   각 child는 name(개념명)과 brief(한 줄 설명)를 포함합니다.
+여러 문단에 걸쳐 기초 개념을 설명하지 마십시오. 한 줄이면 충분합니다.
 
-반드시 지정된 JSON 형식으로만 응답하십시오.\
+topic_id 규칙:
+- 소문자 + 언더스코어
+- 예: vector_dot_product, softmax, rnn_lstm_gru, matrix_multiplication
+- 사전 정의된 풀: neural_network_basics, vector_dot_product, matrix_multiplication,
+  softmax, rnn_lstm_gru, cnn_basics, encoder_decoder, attention_history,
+  optimization_basics, regularization
+- 풀에 없는 주제도 자유롭게 만들 수 있음 (예: batch_normalization)
+
+### 원칙 3 — 하위 논점 분해
+각 섹션을 2~5 개의 "저자가 하는 하위 논점" 으로 분해하십시오.
+각 논점이 자식 노드가 됩니다. 각 자식은 다시 재귀적으로 분해됩니다.
+
+### 원칙 4 — 실험 섹션은 자세히
+Training, Results, Experiments 같은 섹션은 특히 자세히 해설:
+- 하이퍼파라미터 선택 이유
+- 실험 설계의 의도
+- Table/Figure 의 수치 해석
+- 비교 대상 선택 이유
+
+### 원칙 5 — 한국어로
+모든 설명은 한국어. 영어 원문 병기는 허용.
+
+### 원칙 6 — 구체성
+"중요한 개선", "혁신적" 같은 모호한 수사 금지. 구체적 용어와 수치 사용.
+
+## 절대 금지
+- 원문에 없는 사실 날조
+- 저자와 무관한 교과서 설명
+- 본문에 기초 개념 깊게 설명
+- 모호한 표현
+- 영어로만 작성
+
+반드시 지정된 JSON 스키마로만 응답하십시오.\
 """
 
 _USER_PROMPT_TEMPLATE = """\
-다음 개념에 대한 설명을 생성해 주세요.
+다음 논문 섹션에 대한 해설을 생성해 주세요.
 
-## 개념 이름
+## 섹션 이름
 {concept}
 
 ## 원문 (source_excerpt)
@@ -57,15 +86,15 @@ _USER_PROMPT_TEMPLATE = """\
 """
 
 _CHILDREN_INSTRUCTION_NEW = """\
-## 하위 개념 생성
-이 개념을 이해하기 위해 필요한 선행 개념이 있다면 children에 나열하세요.
-목표 독자가 이미 알 것으로 기대되는 기초 개념은 제외하세요.
-더 이상 분해가 필요 없으면 is_leaf=true, children=[]로 응답하세요.\
+## 하위 논점 생성
+이 섹션에서 저자가 다루는 하위 논점들을 2~5개 나열하세요.
+각 논점은 저자의 한 주장이나 설명 단위에 대응합니다.
+더 이상 분해가 필요 없는 단순한 서술이면 is_leaf=true, children=[]로 응답하세요.\
 """
 
 _CHILDREN_INSTRUCTION_EXISTING = """\
-## 하위 개념
-이 개념의 하위 구조는 이미 정해져 있습니다. children=[]로 응답하세요.
+## 하위 논점
+이 섹션의 하위 구조는 이미 정해져 있습니다. children=[]로 응답하세요.
 explanation만 생성하면 됩니다.\
 """
 
@@ -82,7 +111,7 @@ _EXPAND_SCHEMA = {
     "properties": {
         "explanation": {
             "type": "string",
-            "description": "목표 독자 수준의 한국어 설명",
+            "description": "top-down 저자 관점 해설 (한국어). 기초 개념은 [[REF:topic_id]] 로.",
         },
         "is_leaf": {
             "type": "boolean",
@@ -93,15 +122,23 @@ _EXPAND_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "하위 개념 이름"},
-                    "brief": {"type": "string", "description": "한 줄 설명"},
+                    "concept": {"type": "string", "description": "하위 논점 이름 (짧은 한국어 명사구)"},
+                    "brief": {
+                        "type": "string",
+                        "description": "이 자식 노드가 다룰 하위 논점 한 줄 요약 (한국어)",
+                    },
                 },
-                "required": ["name", "brief"],
+                "required": ["concept", "brief"],
             },
-            "description": "이해에 필요한 선행 개념 리스트",
+            "description": "2~5 개의 하위 논점. max_depth 도달 시 빈 리스트.",
+        },
+        "prerequisites": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "explanation 에 등장한 기초 개념 topic_id 리스트 (소문자+언더스코어)",
         },
     },
-    "required": ["explanation", "is_leaf", "children"],
+    "required": ["explanation", "is_leaf", "children", "prerequisites"],
 }
 
 _EXPAND_SCHEMA_NO_CHILDREN = {
@@ -109,7 +146,7 @@ _EXPAND_SCHEMA_NO_CHILDREN = {
     "properties": {
         "explanation": {
             "type": "string",
-            "description": "목표 독자 수준의 한국어 설명",
+            "description": "top-down 저자 관점 해설 (한국어). 기초 개념은 [[REF:topic_id]] 로.",
         },
         "is_leaf": {
             "type": "boolean",
@@ -120,15 +157,20 @@ _EXPAND_SCHEMA_NO_CHILDREN = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
+                    "concept": {"type": "string"},
                     "brief": {"type": "string"},
                 },
-                "required": ["name", "brief"],
+                "required": ["concept", "brief"],
             },
             "description": "이미 하위 구조가 있으므로 빈 배열로 응답",
         },
+        "prerequisites": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "explanation 에 등장한 기초 개념 topic_id 리스트 (소문자+언더스코어)",
+        },
     },
-    "required": ["explanation", "is_leaf", "children"],
+    "required": ["explanation", "is_leaf", "children", "prerequisites"],
 }
 
 
@@ -230,6 +272,7 @@ class Expander:
                 # 재시도 시 상태 초기화
                 root.explanation = ""
                 root.verification = {}
+                root.prerequisites = []
                 if allow_new_children:
                     root.children = []
                 else:
@@ -238,6 +281,7 @@ class Expander:
                 # Claude 호출
                 result = self._call_expand(root, allow_new_children, previous_errors)
                 root.explanation = result.get("explanation", "")
+                root.prerequisites = result.get("prerequisites", [])
 
                 if result.get("is_leaf", False):
                     root.is_leaf = True
@@ -249,10 +293,11 @@ class Expander:
                     ]
                     for child_data in new_children:
                         child = ConceptNode(
-                            concept=child_data.get("name", ""),
+                            concept=child_data.get("concept", ""),
                             source_excerpt=child_data.get("brief", ""),
                             depth=root.depth + 1,
                             parent_id=root.id,
+                            part=2,
                         )
                         root.children.append(child)
 

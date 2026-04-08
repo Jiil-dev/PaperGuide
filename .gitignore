@@ -40,3 +40,6 @@ desktop.ini
 # ===== 로그 =====
 *.log
 logs/
+
+# Claude Code local settings
+.claude/

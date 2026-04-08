@@ -192,12 +192,8 @@ class Expander:
 
         # === 가드 체크 ===
 
-        # 1. 깊이 초과 → leaf로 강제
-        if root.depth >= self._max_depth:
-            root.is_leaf = True
-            root.status = "done"
-            self._notify(root)
-            return
+        # 1. 깊이 초과 → leaf로 강제하되 explanation은 생성
+        force_leaf = root.depth >= self._max_depth
 
         # 2. 조상 경로 순환 체크
         if self._cache.check_ancestor_cycle(root.concept, ancestor_path):
@@ -218,8 +214,14 @@ class Expander:
 
         # === Claude 호출 + 검증 루프 ===
         has_existing_children = len(root.children) > 0
-        allow_new_children = not has_existing_children
-        existing_children = list(root.children) if has_existing_children else []
+        if force_leaf:
+            allow_new_children = False
+            root.is_leaf = True
+        else:
+            allow_new_children = not has_existing_children
+        existing_children = (
+            list(root.children) if has_existing_children and not force_leaf else []
+        )
 
         previous_errors: list[dict] | None = None
 

@@ -21,6 +21,7 @@ def assemble(
         output_path: 출력 .md 파일 경로.
     """
     id_map = _build_global_id_map(roots)
+    prefix_map = _build_prefix_map(roots)
 
     parts = []
 
@@ -35,7 +36,7 @@ def assemble(
 
     # 본문
     for i, root in enumerate(roots, 1):
-        _render_node(root, prefix=f"{i}", header_level=2, sections=parts, id_map=id_map)
+        _render_node(root, prefix=f"{i}", header_level=2, sections=parts, id_map=id_map, prefix_map=prefix_map)
         # 루트 간 구분선 (마지막 루트 뒤에는 넣지 않음)
         if i < len(roots):
             parts.append("\n---\n")
@@ -57,6 +58,26 @@ def _build_global_id_map(roots: list[ConceptNode]) -> dict[str, ConceptNode]:
     for root in roots:
         global_map.update(build_id_map(root))
     return global_map
+
+
+def _build_prefix_map(roots: list[ConceptNode]) -> dict[str, tuple[str, str]]:
+    """각 노드 id에 번호 prefix와 concept을 매핑한다.
+
+    예: {"abc123": ("1.2.1", "Softmax 함수")}
+
+    duplicate 노드가 원본의 번호를 찾을 때 사용.
+    """
+    prefix_map: dict[str, tuple[str, str]] = {}
+
+    def _walk(node: ConceptNode, prefix: str) -> None:
+        prefix_map[node.id] = (prefix, node.concept)
+        for j, child in enumerate(node.children, 1):
+            _walk(child, f"{prefix}.{j}")
+
+    for i, root in enumerate(roots, 1):
+        _walk(root, f"{i}")
+
+    return prefix_map
 
 
 def _make_anchor(numbered_title: str) -> str:
@@ -97,19 +118,24 @@ def _render_node(
     header_level: int,
     sections: list[str],
     id_map: dict[str, ConceptNode],
+    prefix_map: dict[str, tuple[str, str]],
 ) -> None:
     """노드를 Markdown 섹션으로 렌더링하고 sections에 추가한다."""
     hashes = "#" * header_level
     header = f"{hashes} {prefix}. {node.concept}"
-    body = _render_status(node, id_map)
+    body = _render_status(node, id_map, prefix_map)
     sections.append(f"\n{header}\n\n{body}")
 
     for j, child in enumerate(node.children, 1):
         child_prefix = f"{prefix}.{j}"
-        _render_node(child, child_prefix, header_level + 1, sections, id_map)
+        _render_node(child, child_prefix, header_level + 1, sections, id_map, prefix_map)
 
 
-def _render_status(node: ConceptNode, id_map: dict[str, ConceptNode]) -> str:
+def _render_status(
+    node: ConceptNode,
+    id_map: dict[str, ConceptNode],
+    prefix_map: dict[str, tuple[str, str]],
+) -> str:
     """노드 상태에 따라 본문을 렌더링한다."""
     if node.status == "done":
         return node.explanation
@@ -121,11 +147,15 @@ def _render_status(node: ConceptNode, id_map: dict[str, ConceptNode]) -> str:
                 f"순환이 감지되었습니다."
             )
         else:
-            orig = id_map.get(node.duplicate_of or "")
-            if orig:
+            orig_entry = prefix_map.get(node.duplicate_of or "")
+            if orig_entry:
+                orig_prefix, orig_concept = orig_entry
+                orig_numbered = f"{orig_prefix}. {orig_concept}"
+                anchor = _make_anchor(orig_numbered)
                 return (
-                    f'> [중복] "{orig.concept}"과 동일 개념입니다. '
-                    f"위쪽 설명을 참조하세요."
+                    f"> [중복] 이 개념은 "
+                    f"[§{orig_prefix} {orig_concept}](#{anchor})와 "
+                    f"동일합니다. 위 섹션을 참조하세요."
                 )
             else:
                 return (

@@ -1,217 +1,278 @@
-# Paper Analyzer — 작업 인계 문서
+# HANDOFF.md — PaperGuide 프로젝트 핸드오프
 
-## 1. 프로젝트 현재 상태
+> **이 문서는 PaperGuide 프로젝트의 "헌법"이다.**
+> 웹 Claude(설계), Claude Code(구현), 사용자(의사결정) 3자가 이 문서를
+> 공통의 약속으로 삼는다. 방향을 잃었을 때 항상 이 문서로 돌아온다.
+>
+> **마지막 전면 개편**: 2026-04-08 (Phase 3 재설계)
+> **이 문서는 "방향"이다. 모든 세부 설계는 각 모듈 작업 시점에 대화로 확정한다.**
 
-- **Phase**: Phase 2 진입 직후 (설정 파일 단계)
-- **완료**: 
-  - `CLAUDE.md` 작성 (출력 포맷 섹션 포함)
-  - `requirements.txt` 생성 (7개 패키지)
-  - Python/venv/pip 환경 준비 (WSL Ubuntu)
-- **미완료**:
-  - `.venv` 재생성 여부 확인 필요
-  - `pip install -r requirements.txt` 실행 및 검증
-  - `.gitignore` 생성
-  - `config.yaml` 생성
-  - `src/` 하위 코드 파일 전체 (아직 한 개도 없음)
+---
 
-## 2. 환경 정보
+## 1. 프로젝트 정체성
 
-- WSL Ubuntu
-- 프로젝트 경로: `~/j0061/paper-analyzer` (공백 없음)
-- Python 3.10+ (`python-is-python3` 설치 완료)
-- Claude Code CLI: WSL 측에 설치되어 `claude --version` 동작 확인
+### 1.1. 목표
 
-## 3. 확정된 핵심 설계 결정 (절대 뒤집지 말 것)
+**PaperGuide는 AI 논문 하나를 "처음부터 끝까지 완전히 이해"할 수 있도록 돕는
+top-down 해설서 생성기다.**
 
-### 3-1. 8가지 설계 보정 (전부 합의 완료)
+- **입력**: AI 분야 학술 논문 (PDF 또는 arXiv LaTeX 소스 디렉터리)
+- **출력**: 단일 Markdown 파일 — 완전판 가이드북
+- **목표 독자**: 고등학교 수학 2 + 물리 1 + 기초 프로그래밍을 이수한 대학교 1학년.
+  선형대수, 확률론, 머신러닝, 딥러닝 지식은 전혀 없음.
+- **독자가 얻는 것**: 이 가이드북을 처음부터 끝까지 읽으면 (1) 논문을 완전히
+  이해하고 (2) 논문 이해에 필요한 기초 지식까지 탄탄히 갖춘 상태가 된다.
 
-1. **claude_client.py 시그니처 확장**: `call(user_prompt, system_prompt, json_schema, ...)` 형태. `system_prompt` 필수 인자. `max_total_calls` 상한, `get_stats()` 메서드 포함.
+### 1.2. 핵심 철학
 
-2. **3가지 모드 지원**: `ClaudeClient(mode="live"|"cache"|"dry_run")`. 
-   - `live`: 실제 `claude -p` 호출
-   - `cache`: 해시 기반 디스크 캐시 (`data/cache/claude_responses/<hash>.json`)
-   - `dry_run`: 스키마 기본값으로 가짜 응답
-   - 기본값은 `cache` (개발용), config.yaml의 `claude.mode`로 제어
+세 가지 원칙이 모든 설계를 지배한다.
 
-3. **verifier → expander 피드백 경로**: `expand_node(..., previous_errors: list[dict] | None = None)`. previous_errors가 있으면 "이전 답변의 오류: ... 수정해서 다시 작성하라"를 프롬프트 앞에 주입. 재생성 루프는 expander 내부에서 `verification.max_retries`회. 실패 시 노드에 `status="verification_failed"` 마킹 후 탐색 계속.
+- **top-down**: 논문이 먼저다. "저자가 무엇을 주장하는가, 왜 그렇게 주장하는가" 가
+  중심이다. 기초 지식은 논문 이해를 위해 필요한 순간에만 등장한다.
 
-4. **concept_cache.py 인터페이스**: 외부 메서드는 `lookup(concept_name, brief)`, `add(node_id, concept_name, brief)`, `check_ancestor_cycle(concept_name, ancestor_path)` 세 개만. 임베딩 계산은 내부에서만. 외부가 embedding_vec을 넘기는 설계 금지.
+- **흐름 우선**: 독자가 논문 해설을 읽는 동안 기초 지식 때문에 흐름이 끊기면 안 된다.
+  본문에서는 한 줄 병기로만. 깊은 설명은 별도 Part로 위임.
 
-5. **chunker.py가 ConceptNode 직접 반환**: `split_into_sections(markdown) -> list[ConceptNode]`. Section dict 중간 타입 만들지 말 것.
+- **기초는 얕지 않게**: 그 별도 Part에서는 "이 논문 이해에 필요한 만큼 충분히 깊게"
+  가르친다. 용어집 수준의 얕은 설명은 금지. 한 학기 교재 분량은 과함.
 
-6. **expander의 checkpoint 의존 제거**: 
-   - expander.py는 checkpoint 모듈을 절대 import하지 않는다.
-   - `expand_tree(..., on_node_done: Callable[[ConceptNode], None] | None = None)` 콜백만 받는다.
-   - 매 노드 확장(중복/실패 포함)이 끝날 때마다 `on_node_done(node)` 호출.
-   - 체크포인트 저장은 전적으로 main.py의 책임. main.py가 `lambda n: checkpoint.save(root, ...)` 형태로 콜백 주입.
+### 1.3. 절대 규칙 (변경 불가)
 
-7. **validate_no_anthropic_usage()**: main.py 시작 시 src/ 전체를 검사. `import anthropic`, `ANTHROPIC_API_KEY`, `api.anthropic.com` 등의 패턴이 있으면 즉시 중단. CLAUDE.md 절대 규칙의 코드 안전핀.
+1. **Anthropic API 사용 금지.** `import anthropic`, `httpx`, `requests` 전부 금지.
+   `api.anthropic.com` 호출 금지. `ANTHROPIC_API_KEY` 금지.
+   유일한 허용 방식은 `subprocess.run(["claude", "-p", ...])`.
 
-8. **assembler의 중복/실패 노드 렌더링**:
-   - `status == "duplicate"` 또는 `duplicate_of`가 설정된 노드: 본문 다시 쓰지 않고 `→ §<duplicate_of_id> "<원본 개념명>" 참조` 한 줄만.
-   - `status == "verification_failed"`: 설명 앞에 `> ⚠ 검증 실패 — 원문 대조 필요` 인용 블록 삽입.
+2. **Claude 호출은 JSON 모드 + 스키마 강제.** `--output-format json`,
+   `--json-schema`. 자유 텍스트 파싱 금지.
 
-### 3-2. 캐시 해시 정책 (claude_client.py)
+3. **출력은 Markdown 단일 파일.** PDF/HTML/Word 변환 금지.
+   pandoc, weasyprint, reportlab 등 import 금지. GitHub·VSCode 뷰어가 수식과
+   접이식 블록을 렌더링한다고 가정.
 
-- 해시 알고리즘: **SHA-256** (MD5 금지)
-- 해시 입력 = 아래 4개의 연결:
-  1. `system_prompt` 전문
-  2. `user_prompt` 전문
-  3. `json.dumps(json_schema, sort_keys=True)`
-  4. `CLAUDE_CLIENT_VERSION = "1"` (클라이언트 상수, 프롬프트 템플릿/스키마 수정 시 +1로 캐시 일괄 무효화)
-- 캐시 경로: `data/cache/claude_responses/<sha256>.json`
-- 손상된 캐시 파일(json.loads 실패)은 조용히 무시하고 live 폴백
+4. **한 번에 한 모듈만 작업.** design → implement → verify → commit 순서.
+   병렬 수정 금지.
 
-### 3-3. 출력 포맷 결정
+5. **dry_run / cache 모드 기본.** 실제 live 호출은 사용자 승인 후에만.
 
-- **최종 산출물은 Markdown(.md)만 생성**
-- PDF/HTML/EPUB 변환은 본 프로젝트 범위 밖
-- assembler.py에 pandoc, weasyprint, reportlab 등 PDF 관련 코드 금지
-- 향후 PDF 필요하면 별도 스크립트(`scripts/md_to_pdf.sh`)로 분리
+6. **웹 Claude 지시를 그대로 Claude Code에 전달.** Claude Code는 설계를
+   자의적으로 변경하지 않는다. 의문이 생기면 사용자에게 되물어 웹 Claude에게 전달.
 
-### 3-4. 목표 독자 수준
+---
 
-- 학부 1학년
-- 배경지식: 고등학교 수학2(미적분 기초), 고등학교 물리1, 기초 프로그래밍
-- 선형대수/확률/머신러닝/딥러닝 전혀 모름
-- 이 기준을 expander의 시스템 프롬프트와 leaf 판정 규칙에 반영
+## 2. 최종 산출물 구조
 
-### 3-5. 입력 파서 전략
+### 2.1. 3-Part 개요
 
-입력 파서는 두 가지 모듈로 분리된다:
+```
+# [논문 제목] — 완전판 가이드북
 
-**(1) pdf_parser.py** — 일반 PDF 입력 처리
-- 사용 라이브러리: `pymupdf4llm`
-- 용도: 수식이 적은 텍스트 중심 논문, 블로그, 리포트
-- 한계: 수식이 PDF 내부에서 이미지/벡터 그래픽으로 렌더링된 경우,
-  `**==> picture [W x H] intentionally omitted <==**` placeholder로 누락됨
-- 2026-04-08 distillation.pdf (9페이지, 수식 거의 없음)에서 정상 동작 확인
-- 2026-04-08 attention.pdf (15페이지, 수식 밀집)에서 핵심 수식 누락 확인
+## Part 1. 논문이 무엇을 주장하는가 — 큰 그림    (10~15%)
+## Part 2. 논문 따라 읽기 — 완전 해설            (70~80%)
+## Part 3. 기초 지식 탄탄히                      (15~20%)
+```
 
-**(2) arxiv_parser.py** — arXiv TeX 소스 입력 처리 (구현 완료)
-- 사용: 표준 라이브러리 (정규식 기반)
-- 용도: arXiv에 올라온 AI 논문 (주 입력 경로)
-- 입력: 디렉터리 경로 (압축 해제된 .tex 파일 모음)
-- 수식 보존: LaTeX 원본 그대로 유지 (완벽)
-- 2026-04-08 Attention Is All You Need (arXiv 1706.03762) 소스로 검증:
-  `\mathrm{Attention}(Q,K,V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V` 확인
+### 2.2. Part 1 — 큰 그림
 
-**입력 형식 판정 (main.py가 수행):**
-- 경로가 `.pdf`로 끝나면 → pdf_parser 호출
-- 경로가 디렉터리이면 → arxiv_parser 호출
+독자가 Part 1만 읽어도 "이 논문이 무엇을 했고 왜 중요한가"에 답할 수 있어야 한다.
+핵심 주장, 해결 문제, 기여, 주요 결과, 의의를 담는다. 모든 논문에 공통된 뼈대를
+가지되 **실제 세부 구조는 논문 내용에 따라 동적으로 결정**한다.
 
-**테스트 데이터 위치 (git 추적 안 됨):**
-- `data/papers/distillation.pdf` — pdf_parser 테스트용
-- `data/papers/attention/` — arxiv_parser 테스트용 (arXiv 1706.03762 TeX 소스)
-- 다른 머신에서 재현 시 이 두 파일을 수동으로 받아서 같은 위치에 배치.
+### 2.3. Part 2 — 논문 따라 읽기 (핵심)
 
-**arxiv_parser.py의 알려진 한계 (2026-04-08 기준):**
+Part 2는 가이드북의 심장이다. 논문의 각 섹션을 순서대로 따라가며 저자의 논증을
+해설한다. 독자가 원 논문을 읽지 않고도 논문 전체를 이해할 수 있어야 한다.
 
-다음 케이스는 현재 버전이 완벽하게 처리하지 못한다. Attention 논문
-(arXiv 1706.03762)에서는 문제되지 않았으나, 다른 논문에서 발생하면
-보정이 필요할 수 있다.
+**논문 유도적 구조**: Part 2의 소제목과 세부 구조는 **논문의 실제 섹션 구성을
+그대로 따른다**. 논문마다 섹션이 완전히 다르므로 이 문서는 어떤 고정 템플릿도
+규정하지 않는다. 구조는 PaperGuide가 논문을 분석해서 동적으로 생성한다.
 
-1. **2-인자 LaTeX 명령**: `\href{url}{text}` 같은 형태는 URL만 남고
-   text 부분이 부정확하게 처리됨. _cleanup_unknown_commands가 첫 번째
-   인자만 남기기 때문.
+**글쓰기는 §1.2의 세 원칙을 따른다**: top-down (저자 중심), 흐름 우선 (기초
+지식은 위임), 기초는 얕지 않게 (Part 3에서 충분히). 구체적 글쓰기 지침은
+`part2_writer` (혹은 이에 해당하는 모듈) 작업 시점에 프롬프트로 확정한다.
 
-2. **사용자 정의 매크로 미확장**: `\newcommand{\dmodel}{...}` 같은
-   정의는 제거되지만, 본문의 `\dmodel` 사용 위치는 확장되지 않음.
-   인자 없는 매크로는 원본 텍스트로 유지되고, 인자 있는 매크로는
-   _cleanup_unknown_commands에 의해 콘텐츠만 남을 수 있음. 대부분의
-   사용자 매크로는 수식 내부에 있어 수식 보호로 안전.
+**절대 금지**: 기초 지식을 본문에 깊게 박아넣기. 수식 나열만 하기. 저자와
+무관한 교과서 설명. 원문에 없는 사실 날조.
 
-3. **테이블 내부 `\\` 행 구분자**: `\begin{table}` 환경은 보존되지만
-   내부의 `\\`는 전역 치환에 의해 줄바꿈으로 바뀌어 행 구조가 부분
-   손실될 수 있음. 수식 환경과 달리 table 환경은 _protect_math의
-   보호 범위가 아니기 때문.
+### 2.4. Part 3 — 기초 지식 탄탄히
 
-4. **중복 `\author` 블록**: 첫 번째 `\author{...}`만 제거됨. 여러
-   `\author` 블록이 있는 논문은 두 번째부터 남을 수 있음.
+Part 2에서 등장한 기초 개념들을 한 곳에 모아 **독립적으로 읽을 수 있도록**
+탄탄하게 설명한다. 독자가 외부 교재 없이 이 논문을 이해할 수 있어야 한다.
 
-이 한계들은 "작동하는 코드를 미리 고치지 마라" 원칙에 따라 당장
-보정하지 않고, 실제 문제가 발생한 논문이 나오면 그때 잡는다.
+깊이 기준: "이 논문을 이해하는 데 필요한 만큼 충분히 깊게". 각 주제는 독립적
+단위이며, 정의 → 원리 → 예시 → 논문과의 연결 순으로 구성된다. 각 주제 끝에는
+"이 지식은 Part 2의 X 섹션에서 사용됨" 역링크가 붙는다.
 
-### 3-6. expander 시스템 프롬프트 요구사항 (verifier 테스트에서 발견)
+### 2.5. Part 2 ↔ Part 3 연결
 
-verifier의 실제 호출 테스트(2026-04-08)에서 확인된, expander가 생성하는
-explanation이 반드시 지켜야 할 규칙:
+Part 2에서 기초 개념이 등장할 때마다 Part 3의 해당 항목으로 링크가 연결된다.
+구체적 구현 방식(플레이스홀더 문법, 치환 로직 등)은 작업 시점에 확정한다.
 
-1. **전문 용어는 반드시 풀어쓰기**: "softmax", "어텐션 메커니즘" 같은
-   전문 용어는 처음 등장 시 학부 1학년 수준 풀이 병기.
-   예: "softmax(각 값을 0~1 사이 확률로 변환하는 함수)"
+---
 
-2. **source_excerpt에 없는 정보 금지**: 외부 지식으로 보충하지 말 것.
-   source_excerpt에 scaling 이유가 없으면 explanation에도 없어야 함.
-   배경 지식이 필요하면 자식 노드로 분리.
+## 3. 파이프라인 흐름
 
-3. **이 규칙들을 expander의 system_prompt에 명시적으로 포함**.
+### 3.1. 단계별 흐름도
 
-### 3-7. Phase 2 완료 상태 (2026-04-08)
+```
+[PDF or arXiv]
+    ↓ parse
+[Markdown 전체]
+    ↓ 1차 섹션 분할
+[섹션 리스트]
+    ↓
+[논문 전체 분석]  ← Claude 호출, Part 1 재료 생성
+    ↓
+[섹션별 top-down 해설 작성]  ← Claude 호출 다수, Part 2 트리 생성
+    ↓
+[기초 지식 주제 수집 + 중복 제거]  ← 로컬 로직
+    ↓
+[기초 지식 해설 작성]  ← Claude 호출 다수, Part 3 생성
+    ↓
+[Part 2 ↔ Part 3 링크 치환]  ← 로컬 로직
+    ↓
+[3-Part 구조로 최종 Markdown 조립]
+    ↓
+[guidebook.md]
+```
 
-**12/12 모듈 완성**:
-1. config.py — Pydantic 설정 로더
-2. tree.py — ConceptNode dataclass + DFS 헬퍼
-3. pdf_parser.py — PDF → Markdown (pymupdf4llm)
-4. arxiv_parser.py — LaTeX 소스 → Markdown (수식 보존)
-5. chunker.py — Markdown → ConceptNode 계층 트리
-6. concept_cache.py — 3단계 중복/순환 차단
-7. claude_client.py — subprocess 기반 claude -p 래퍼
-8. verifier.py — 4축 검증 (원문/수준/자기충족/수식)
-9. expander.py — DFS 재귀 확장 + 재시도
-10. checkpoint.py — JSON 직렬화/재개
-11. assembler.py — Markdown 가이드북 렌더러
-12. main.py — CLI 진입점 + 오케스트레이션
+### 3.2. 할당량 감각
 
-**End-to-end 검증 (2026-04-08)**:
-- 입력: data/papers/attention_mini/ (Abstract + Introduction만, 2.7KB)
-- 모드: cache
-- 제한: max_depth=2, max_children=3, max_total_calls=15 → 초과 후 200으로 --resume
-- 결과: 22 노드 전부 처리 (done 21, duplicate 1), 20KB 한국어 가이드북 생성
-- 검증: concept_cache 임베딩 dedup, --resume 재개, 수식 보존, 계층 구조 전부 확인
+Phase 2 대비 약 **10~15배 많다**. Phase 2의 attention_mini 테스트가 38 calls
+였으므로 Phase 3의 같은 입력은 수백 calls 수준. 실제 논문 전체는 더 많다.
+정확한 숫자는 Phase 3 첫 live 테스트로 확인한다.
 
-**알려진 개선 여지 (향후)**:
-1. depth=max_depth 노드의 explanation이 빈 문자열 → assembler에서 플레이스홀더 렌더링 또는 expander에서 간단한 설명 생성
-2. Abstract가 과도하게 확장되는 경향 → expander system_prompt에 "Abstract는 요약이므로 is_leaf=True 우선 고려" 추가
-3. 비슷한 concept의 임베딩 유사도가 threshold 이하로 떨어지는 경우 중복 미감지 → 실제 논문 돌려보며 threshold 튜닝 (현재 0.88)
-4. arxiv_parser의 \href, \newcommand 미지원 (HANDOFF.md 3-5 "알려진 한계" 참조)
+`config.yaml`의 `max_total_calls`는 넉넉히 (현재 500 → 최소 1500) 올린다.
 
-## 4. 모듈 설계 요약 (각 파일의 책임)
+---
 
-- `config.py`: YAML 로드, Pydantic v2 검증, 경로 자동 생성
-- `pdf_parser.py`: PDF → 수식 포함 Markdown (pymupdf4llm)
-- `chunker.py`: Markdown → ConceptNode 리스트 (헤더 기반)
-- `tree.py`: ConceptNode 데이터클래스 (concept, source_excerpt, explanation, is_leaf, depth, parent_id, children, status, duplicate_of, failed_errors, verification)
-- `concept_cache.py`: 3단계 중복 차단 (해시 → 임베딩 유사도 ≥0.88 → 조상 경로 순환)
-- `claude_client.py`: subprocess로 `claude -p` 호출, 3모드 지원, JSON schema 강제, tenacity 재시도, 호출 상한
-- `expander.py`: DFS 재귀 확장, on_node_done 콜백, previous_errors 피드백 루프
-- `verifier.py`: 별도 Claude 호출로 hallucination/omission/contradiction/math_error 검출
-- `checkpoint.py`: 트리 JSON 직렬화/역직렬화 (main에서만 호출)
-- `assembler.py`: DFS 순회로 Markdown 책 생성, 중복/실패 노드 특별 렌더링
-- `main.py`: argparse, 체크포인트 재개 분기, validate_no_anthropic_usage, expander에 콜백 주입
+## 4. 모듈 변경 방향
 
-## 5. 다음 세션이 가장 먼저 해야 할 일
+구체적 파일명, 함수 시그니처, 클래스 구조는 **작업 시점에 대화로 확정**한다.
+이 문서는 변경의 *방향*만 제시한다.
 
-1. 현재 `.venv` 상태 확인 (`ls -la .venv`)
-2. 필요하면 `.venv` 재생성: `rm -rf .venv && python -m venv .venv && source .venv/bin/activate`
-3. `pip install --upgrade pip setuptools wheel`
-4. `pip install -r requirements.txt`
-5. 설치 검증: `pip list | grep -iE "pymupdf|sentence-transformers|numpy|pyyaml|tenacity|rich|pydantic|torch"`
-6. 설치 성공하면 `.gitignore` 생성 단계로 진입
+### 4.1. 유지되는 것 (Phase 2 성과)
 
-## 6. 절대 하지 말 것 (Claude가 자의적으로 저지르기 쉬운 실수)
+파서 계층(PDF, arXiv), Claude CLI 래퍼, 체크포인트, 설정 로더, 조립기(assembler)의
+**골격**, DFS 재귀 구조, 중복 감지(concept_cache)의 임베딩 로직, 검증기(verifier)의
+기본 틀. 이것들은 Phase 2에서 검증됐고 Phase 3에서도 그대로 쓸 수 있다.
 
-- `anthropic` Python SDK import, API 키 사용, `api.anthropic.com` 호출 → **전부 금지**, CLAUDE.md 참조
-- 설계 합의 없이 파일 여러 개 동시 생성
-- 테스트 프레임워크(pytest 등) 추가
-- Docker/CI/README 생성 (README는 맨 마지막)
-- PDF 변환 코드(pandoc, weasyprint 등) 추가
-- 한 파일을 작성한 뒤 "다음 파일도 바로 만들겠다"며 허락 없이 이어가기
+### 4.2. 크게 바뀌는 것
 
-## 7. 작업 규칙 (CLAUDE.md에서 재확인)
+- **chunker의 역할 축소**: Phase 2에서는 계층 트리를 만드는 중요한 역할이었으나,
+  Phase 3에서는 논문을 1차 섹션으로만 분할한다. 하위 구조는 Claude가 분석한다.
 
-- 새 파일 만들기 전에 책임과 인터페이스를 한국어로 요약해서 사용자에게 OK 받기
-- 코드 작성 직후 `python -c "import src.<모듈>"` import 테스트
-- 외부 호출(claude -p, 모델 다운로드) 필요하면 사용자에게 먼저 묻기
-- 의미 있는 단위 끝날 때마다 git commit 제안
-- 모르는 건 추측하지 말고 물어보기
+- **expander의 철학 반전**: Phase 2의 "선행 개념을 자식으로" 가 Phase 3에서는
+  "섹션의 하위 논점을 자식으로" 로 바뀐다. 내부 로직은 거의 재작성된다. 파일명은
+  유지될 수도, 바뀔 수도 있다 — 작업 시점에 판단.
+
+- **verifier의 검증 기준 확장**: "원문 충실"에 더해 "논문 중심성"(교과서로 빠지지
+  않는가) 과 "흐름 유지"(기초 지식으로 흐름을 끊지 않는가) 를 추가한다.
+
+- **assembler의 출력 구조**: 단일 트리에서 3-Part 구조로 확장한다.
+
+### 4.3. 새로 필요한 것
+
+- **논문 전체 분석 단계**: Part 1 생성용. 논문 전체를 받아 큰 그림을 추출한다.
+
+- **기초 지식 파이프라인**: Part 3 생성을 위한 일련의 처리 — 수집, 해설 작성,
+  링크 치환.
+
+이것들이 몇 개의 모듈로 나뉠지는 작업하면서 결정한다. "모듈 하나당 하나의 책임"
+원칙에 따라 자연스러운 분할점을 찾는다.
+
+### 4.4. `config.yaml`
+
+`max_total_calls` 상향, Part 1/2/3 관련 신규 설정 추가. 필드 이름과 기본값은
+작업 시점에 확정한다.
+
+---
+
+## 5. 작업 순서
+
+Phase 2의 성공 패턴 **design → implement → verify → commit** 을 유지한다.
+한 번에 한 모듈만.
+
+### 단계 1. 뼈대 준비 (할당량 0)
+데이터 구조, chunker 축소, config 확장 등 Claude 호출이 필요 없는 구조적 변경.
+
+### 단계 2. Part 1 생성 (첫 Claude 호출 단계)
+논문 전체 분석 → Part 1 재료 생성. 작은 논문으로 live 테스트. 사용자가 결과 확인.
+
+### 단계 3. Part 2 생성 (top-down 해설의 심장)
+expander 재작성 + verifier 확장. attention_mini 1개 섹션으로 live 테스트.
+사용자가 "bottom-up 회귀 여부" 직접 판단.
+
+### 단계 4. Part 3 파이프라인
+기초 지식 수집 + 해설 작성 + 링크 치환. 단위 테스트 중심, 마지막에 통합 테스트.
+
+### 단계 5. 최종 조립 + End-to-end 테스트
+assembler와 main.py 업데이트. attention_mini로 전체 파이프라인 실행. **사용자가
+최종 결과물을 직접 읽고 판단**. 문제 있으면 해당 단계로 돌아가 수정.
+
+### 단계 6. 실제 논문 전체 테스트
+attention 전체 (또는 선택한 다른 논문) 로 실행. 수백 calls 소요 예상. 사용자
+최종 확인.
+
+### 단계 7. 공개 준비
+README (영어 + 한국어), LICENSE (MIT), 샘플 출력 정리. GitHub push.
+
+**각 단계의 세부 설계(프롬프트, JSON 스키마, 함수 시그니처, 테스트 코드)는 그
+단계를 시작할 때 대화로 확정한다.** 이 문서에 미리 박아두지 않는다.
+
+---
+
+## 6. 테스트 전략
+
+단위 테스트는 각 모듈 작업 시점에. dry_run 모드로 Claude 호출 없이 로직 검증.
+
+통합 테스트는 `data/papers/attention_mini/` 재사용. Phase 2에서 이미 준비된 축소
+입력(Abstract + Introduction).
+
+**품질 검증은 자동화 불가**. Claude가 생성한 가이드북은 사용자가 직접 읽어
+판단한다. 웹 Claude도 Claude Code도 "잘 나왔다" 고 선언하지 않는다. 판단은 오직
+사용자의 몫이다.
+
+회귀 비교: Phase 2 결과물 (`samples/Attention Is All You Need (Mini)_해설.md`,
+56KB) 을 비교 기준으로 보관한다. Phase 3가 명확히 나아졌는지 확인하는 용도.
+**삭제 금지**.
+
+---
+
+## 7. Phase 2 시행착오 기록
+
+Phase 2(2026-04-08 까지) 는 12개 모듈을 구현하고 end-to-end 동작을 확인한
+성공적인 구현이었다. 그러나 철학적으로 **bottom-up**이었다: 논문 섹션을 받으면
+"이해에 필요한 선행 개념" 을 자식으로 분해하는 구조. 결과는 "Abstract 한 문단을
+받으면 RNN/CNN 기초 강의로 변함" 이었다. 가이드북의 절반 이상이 배경 지식 강의가
+되고 논문 분석은 10% 정도에 그쳤다.
+
+**원인**: 초기 HANDOFF가 "학부 1학년 수준 해설" 이라는 한 줄 목표만 담았고,
+설계자가 bottom-up 구조를 기본 가정으로 삼았다. "논문 중심 top-down" 관점이
+명시되지 않았다.
+
+**교훈**: 이 문서의 §1.1 목표와 §1.2 철학은 Phase 3에서 같은 실수를 막기 위해
+명시적으로 쓰였다. "top-down", "흐름 우선", "기초는 얕지 않게" 세 원칙이
+반복해서 등장하는 것은 이 교훈의 결과다.
+
+Phase 2의 최종 샘플 출력은 `samples/` 에 보관되어 회귀 비교 기준이 된다.
+
+---
+
+## 8. 이 문서의 역할과 한계
+
+**이 문서가 하는 것**: 방향, 원칙, 산출물 구조, 파이프라인 흐름, 작업 순서.
+
+**이 문서가 하지 않는 것**: 프롬프트 verbatim, JSON 스키마, 파일 이름, 함수
+시그니처, 코드 예시, 고정된 Part 템플릿, 구체적 할당량 숫자. 이 모든 것은 각
+모듈 작업 시점에 대화로 확정된다.
+
+**운영 원칙**:
+- Phase 3 진행 중 발견되는 문제는 이 문서를 업데이트하며 진화시킨다.
+- 이 문서와 실제 구현이 어긋나면 이 문서를 따라가거나 이 문서를 수정한다.
+- **절대 규칙 (§1.3) 은 수정 불가**. 그 외는 모두 합의에 따라 바뀔 수 있다.
+- Phase 2 HANDOFF가 약 200줄로 잘 작동했다. 이 Phase 3 문서도 **짧게 유지**를
+  목표로 한다. 세부 확정은 여기가 아니라 대화에서 이루어진다.
+
+---
+
+**문서 끝.**

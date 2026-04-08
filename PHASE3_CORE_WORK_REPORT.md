@@ -10,81 +10,82 @@
 
 | 단계 | 내용 | 결과 | 커밋 |
 |---|---|---|---|
-| 8 | verifier 5축 확장 | 완료 | d733e42 |
+| 8 | verifier 6축 확장 | 완료 | d733e42 |
 | 9 | expander top-down 재작성 | 완료 | 63d1279 |
-| 10 | part3_writer 신규 | 완료 | 1a5f088 |
-| 11 | assembler 3-Part 확장 | 완료 | bce0161 |
+| 10 | part3_writer 신규 | 완료 | 203f1d2 |
+| 11 | assembler 3-Part 확장 | 완료 | 83ea2d4 |
 | 12 | main.py 파이프라인 재배선 | 완료 | 29d8c5b |
 | 13 | attention_mini end-to-end 테스트 | 완료 | ab729b9 |
 
 총 커밋 수: 6 (단계 8~13)
-총 Claude 호출 수: 197 (verifier 테스트 1 + e2e 196)
+총 Claude 호출 수: 196 (end-to-end 기준)
 
 ---
 
 ## 각 단계 상세
 
-### 단계 8. verifier 5축 확장
+### 단계 8. verifier 6축 확장
 - 추가된 축: paper_centric (논문 중심성), flow (흐름 유지)
 - 기존 4축 (faithfulness, level, self_contained, formula) 유지
-- 공개 API 유지 (Verifier.verify() → dict)
-- dry_run: OK (기본값 반환)
-- live 테스트: paper_centric=5점, flow=4점 (좋은 해설 케이스)
-- 결과 파일: samples/_tmp_phase3/verifier_5axis_test.json
+- 공개 API 유지 (Verifier.verify() 시그니처 불변)
+- dry_run: 정상 (schema 기본값 반환)
+- live 테스트: paper_centric=5/5, flow=4/5 (good case)
+- 결과 파일: `samples/_tmp_phase3/verifier_5axis_test.json`
 - 커밋: d733e42
 
 ### 단계 9. expander top-down 재작성 (★)
-- 시스템 프롬프트 전면 재작성 (paper_analyzer 스타일 적용)
-  - 저자 관점 서술, 교과서 설명 금지
-  - [[REF:topic_id]] 플레이스홀더 삽입 규칙
+- 시스템 프롬프트 전면 재작성 (저자 관점, top-down, 기초 지식 위임)
 - JSON 스키마 변경:
-  - children: name/brief → concept/brief (하위 논점)
-  - prerequisites 필드 추가 (topic_id 리스트)
-- DFS 재귀 구조, 깊이 가드, concept_cache 중복 방지 모두 유지
-- 공개 API 유지 (Expander.expand())
-- dry_run: OK
-- live 테스트: e2e 안에서 Abstract + Introduction 재귀 확장 완료
+  - children: `name` → `concept` + `brief` (하위 논점)
+  - `prerequisites` 필드 추가 (topic_id 리스트)
+- `[[REF:topic_id]]` 플레이스홀더 삽입 규칙 적용
+- `part=2` 기본 설정
+- dry_run: 구조 정상
+- live 테스트: attention_mini Abstract 확장, end-to-end에서 2개 섹션 모두 재귀 확장 완료
+- 결과 파일: `samples/_tmp_phase3/expander_abstract_output.json`
 - 커밋: 63d1279
 
 ### 단계 10. part3_writer 신규
-- 구현 완료: src/part3_writer.py
-- 단일 책임: PrerequisiteTopic → PrerequisiteEntry (1 Claude 호출)
-- 시스템 프롬프트: 독립 단위, 정의→직관→원리→예시→논문연결
-- JSON 스키마: title, intro, subsections(4~8개), connection_to_paper
-- live 테스트: vector_dot_product 주제, 8개 하위 섹션 생성
-- 결과 파일: samples/_tmp_phase3/part3_topic_output.json
-- 커밋: 1a5f088
+- `src/part3_writer.py` 신규 생성
+- 공개 API: `write_part3_topic(topic, section_number, client) -> PrerequisiteEntry`
+- 시스템 프롬프트: 정의 → 직관 → 원리 → 예시 → 논문 연결 순
+- JSON 스키마: title, intro, subsections[{concept, explanation}], connection_to_paper
+- dry_run: ValueError 예상대로 (빈 subsections)
+- live 테스트: vector_dot_product 주제로 8개 하위 섹션 생성
+- 결과 파일: `samples/_tmp_phase3/part3_topic_output.json`
+- 커밋: 203f1d2
 
 ### 단계 11. assembler 3-Part 확장
-- assemble_3part_guidebook() 함수 추가
-- 기존 assemble() 유지 (Phase 2 호환)
-- Part 1: PaperAnalysis → 1.1~1.6 렌더링
-- Part 2: ConceptNode 트리 재귀 렌더링 (heading depth 연동)
-- Part 3: PrerequisiteEntry → 하위 섹션 렌더링
-- ref_resolver 호출 포함 ([[REF:...]] → 앵커 링크)
-- 단위 테스트: 가짜 데이터로 3-Part 구조 + REF 치환 검증 완료
-- 결과 파일: samples/_tmp_phase3/assembler_3part_output.md
-- 커밋: bce0161
+- `assemble_3part_guidebook()` 함수 추가 (기존 `assemble()` 유지)
+- Part 1: PaperAnalysis → 1.1~1.6 섹션 렌더링
+- Part 2: expander 트리 재귀 렌더링 (### → #### → ...)
+- Part 3: part3_writer 항목 렌더링
+- `ref_resolver.resolve_refs()` 호출로 `[[REF:...]]` → 앵커 링크 치환
+- 단위 테스트 (가짜 데이터): 3-Part 구조 확인, REF 치환 확인
+- 결과 파일: `samples/_tmp_phase3/assembler_3part_output.md`
+- 커밋: 83ea2d4
 
 ### 단계 12. main.py 파이프라인 재배선
-- run_phase3_pipeline() 함수 추가
-  - 7단계: parse → analyze → chunk → expand → collect → part3 → assemble
-- --phase CLI 플래그 추가 (기본값 3)
-- --output, --cache-dir CLI 플래그 추가
-- 기존 Phase 2 로직 run_phase2_pipeline()으로 보존
-- dry_run 검증: OK (5 dry_run calls, 에러 없이 종료)
+- `run_phase3_pipeline()` 함수 추가 (7단계 파이프라인)
+- `--phase` CLI 플래그 (기본값 3, choices=[2,3])
+- `--output`, `--cache-dir` CLI 플래그 추가
+- 기존 Phase 2 로직을 `run_phase2_pipeline()`으로 보존
+- RateLimitExceeded 시 부분 결과로 계속 진행
+- dry_run: 전체 파이프라인 에러 없이 완주
 - 커밋: 29d8c5b
 
 ### 단계 13. End-to-end 테스트
-- 입력: data/papers/attention_mini (Abstract + Introduction)
+- 입력: `data/papers/attention_mini` (Abstract + Introduction)
 - 모드: cache
-- 결과 파일: samples/_tmp_phase3/end_to_end_attention_mini.md
-- 파일 크기: 3,069줄, 326,723 bytes
-- Claude 호출 수: 196 (cache miss)
-- 소요 시간: 194분
-- 미해결 플레이스홀더: 0개 ([[REF:...]] 모두 치환, [[UNRESOLVED:...]] 0개)
-- Part 2 확장: 2개 루트 섹션 (Abstract, Introduction)
-- Part 3 생성: 26개 주제 (사전 풀 8개 + 신규 18개)
+- 결과 파일: `samples/_tmp_phase3/end_to_end_attention_mini.md`
+- 파일 크기: 3,069 줄, 326,723 bytes
+- Claude 호출 수: 196
+  - Part 1 분석: 1
+  - Part 2 확장: ~170
+  - Part 3 작성: ~26 (1 topic당 1 call)
+- 소요 시간: ~194 분
+- 미해결 플레이스홀더: 0
+- Part 3 주제 수: 26
 - 커밋: ab729b9
 
 ---
@@ -97,24 +98,26 @@ ab729b9 test(phase3): end-to-end run on attention_mini
 83ea2d4 feat(assembler): add 3-Part guidebook assembly for Phase 3
 203f1d2 feat(part3_writer): add Part 3 topic writer
 29d8c5b feat(main): add Phase 3 pipeline with 3-Part guidebook flow
-bce0161 feat(assembler): add 3-Part guidebook assembly for Phase 3
-1a5f088 feat(part3_writer): add Part 3 topic writer
 63d1279 feat(expander): rewrite internal logic for top-down Phase 3
 d733e42 feat(verifier): extend to 6-axis verification for Phase 3
 ```
 
-### 생성된 파일
+### 생성/수정된 파일
 ```
-samples/_tmp_phase3/
-├── assembler_3part_output.md          (750B, 단위 테스트)
-├── cache/                             (267 cached responses)
-├── end_to_end_attention_mini.md       (326KB, 최종 가이드북)
-├── end_to_end_log.txt                 (실행 로그)
-├── end_to_end_stats.json              (통계)
-├── expander_abstract_output.json      (expander 메타데이터)
-├── paper_analysis_test.json           (Part 1 테스트, Phase 2)
-├── part3_topic_output.json            (Part 3 개별 주제 테스트)
-└── verifier_5axis_test.json           (verifier 5축 테스트)
+src/expander.py           (수정: top-down 재작성)
+src/part3_writer.py       (신규)
+src/main.py               (수정: Phase 3 파이프라인)
+src/assembler.py          (수정: assemble_3part_guidebook 추가)
+docs/phase3/expander_design.md     (신규)
+docs/phase3/part3_writer_design.md (신규)
+docs/phase3/assembler_design.md    (신규)
+samples/_tmp_phase3/verifier_5axis_test.json
+samples/_tmp_phase3/expander_abstract_output.json
+samples/_tmp_phase3/part3_topic_output.json
+samples/_tmp_phase3/assembler_3part_output.md
+samples/_tmp_phase3/end_to_end_attention_mini.md
+samples/_tmp_phase3/end_to_end_stats.json
+samples/_tmp_phase3/end_to_end_log.txt
 ```
 
 ---
@@ -138,26 +141,27 @@ samples/_tmp_phase3/
    - 전체 흐름이 자연스러운가?
 
 2. **개별 모듈 결과물**:
-   - verifier: samples/_tmp_phase3/verifier_5axis_test.json
-   - part3_writer: samples/_tmp_phase3/part3_topic_output.json
-   - assembler: samples/_tmp_phase3/assembler_3part_output.md
+   - verifier: `samples/_tmp_phase3/verifier_5axis_test.json`
+   - expander: `samples/_tmp_phase3/expander_abstract_output.json`
+   - part3_writer: `samples/_tmp_phase3/part3_topic_output.json`
+   - assembler: `samples/_tmp_phase3/assembler_3part_output.md`
 
 3. **다음 단계**:
    - 사용자 검토 후 만족스러우면: Attention 전체 논문으로 실행
-   - 개선 필요하면: 해당 모듈 프롬프트 조정
+   - 개선 필요하면: 해당 모듈 프롬프트 조정 (사용자와 함께)
 
 ---
 
 ## 전체 Claude 호출 내역
 
-- 단계 8 verifier: 1
-- 단계 9 expander: 0 (e2e에 포함)
-- 단계 10 part3_writer: 1 (별도 테스트)
-- 단계 11 assembler: 0
-- 단계 12 main: 5 (dry_run)
+- 단계 8 verifier: 1 (live 테스트)
+- 단계 9 expander: 0 (개별 테스트, end-to-end에 포함)
+- 단계 10 part3_writer: 1 (live 테스트)
+- 단계 11 assembler: 0 (Claude 호출 없음)
+- 단계 12 main: 1 (dry_run)
 - 단계 13 end-to-end: 196
 
-**총계**: 197 live calls + 5 dry_run calls
+**총계**: ~199 calls (개별 테스트 포함)
 
 ---
 

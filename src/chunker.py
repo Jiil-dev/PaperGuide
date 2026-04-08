@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+from src.data_types import RawSection
 from src.tree import ConceptNode
 
 # ## Abstract 등 하위 레벨이지만 루트로 승격할 섹션 이름 (소문자)
@@ -33,8 +34,67 @@ def _clean_header(text: str) -> str:
     return text.strip()
 
 
+def split_into_raw_sections(markdown: str) -> list[RawSection]:
+    """Markdown 문자열을 1차 섹션 리스트로 분할한다.
+
+    Phase 3의 chunker. 기존 split_into_sections() 와 달리 계층 트리를 만들지 않고
+    ``## 섹션명`` 레벨로만 분할한다.
+
+    Args:
+        markdown: 논문 전체의 Markdown 문자열.
+
+    Returns:
+        RawSection 리스트. 각각 title, content, order.
+
+    규칙:
+        - ``## 섹션명`` (레벨 2) 헤더 기준으로 분할
+        - ``# 제목`` (레벨 1) 은 논문 제목으로 간주하여 skip
+        - ``### 하위`` 이하는 분할하지 않고 상위 섹션 content에 포함
+        - _EXCLUDED_SECTIONS (references, acknowledgments 등) 는 제외
+    """
+    lines = markdown.split("\n")
+    sections: list[RawSection] = []
+    current_title: str | None = None
+    current_content: list[str] = []
+    order_counter = 0
+
+    for line in lines:
+        # 레벨 1 또는 2 헤더 감지 (### 이하는 제외)
+        m = re.match(r"^(#{1,2})\s+(.+?)\s*$", line)
+        if m and not line.startswith("###"):
+            if current_title is not None:
+                title_lower = _clean_header(current_title).lower().strip()
+                if title_lower not in _EXCLUDED_SECTIONS:
+                    order_counter += 1
+                    sections.append(RawSection(
+                        title=_clean_header(current_title),
+                        content="\n".join(current_content).strip(),
+                        order=order_counter,
+                    ))
+            current_title = m.group(2)
+            current_content = []
+        else:
+            if current_title is not None:
+                current_content.append(line)
+
+    if current_title is not None:
+        title_lower = _clean_header(current_title).lower().strip()
+        if title_lower not in _EXCLUDED_SECTIONS:
+            order_counter += 1
+            sections.append(RawSection(
+                title=_clean_header(current_title),
+                content="\n".join(current_content).strip(),
+                order=order_counter,
+            ))
+
+    return sections
+
+
 def split_into_sections(markdown: str) -> list[ConceptNode]:
-    """Markdown 문자열을 헤더 기준으로 분할하여 ConceptNode 리스트로 반환한다.
+    """DEPRECATED (Phase 2 legacy).
+
+    Phase 3에서는 split_into_raw_sections() 를 사용하라.
+    이 함수는 Phase 2 main.py 와의 호환을 위해 유지되며, 새 코드에서는 쓰지 않는다.
 
     # 헤더를 루트 노드, ## 헤더를 자식, ### 헤더를 손자로 구성.
     Abstract는 ## 레벨이지만 루트 노드로 승격.

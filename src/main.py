@@ -9,14 +9,18 @@ from pathlib import Path
 from rich.console import Console
 
 from src.arxiv_parser import parse_arxiv
-from src.assembler import assemble
+from src.assembler import assemble, assemble_3part_guidebook
 from src import checkpoint
-from src.chunker import split_into_sections
+from src.chunker import split_into_sections, split_into_raw_sections
 from src.claude_client import ClaudeClient, RateLimitExceeded
 from src.concept_cache import ConceptCache
 from src.config import load_config
+from src.data_types import PaperAnalysis
 from src.expander import Expander
+from src.paper_analyzer import analyze_paper
+from src.part3_writer import write_part3_topic
 from src.pdf_parser import parse_pdf
+from src.prerequisite_collector import collect_prerequisites
 from src.verifier import Verifier
 
 
@@ -77,27 +81,30 @@ def _parse_args() -> argparse.Namespace:
         "--input",
         help="입력 경로 (PDF 파일 또는 TeX 디렉터리)",
     )
+    parser.add_argument(
+        "--output",
+        help="출력 파일 경로 (기본: data/output/<title>_해설.md)",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        help="캐시 디렉터리 오버라이드",
+    )
+    parser.add_argument(
+        "--phase",
+        type=int,
+        default=3,
+        choices=[2, 3],
+        help="파이프라인 버전 (기본: 3)",
+    )
     return parser.parse_args()
 
 
-def main() -> None:
-    """전체 파이프라인을 실행한다."""
-    # 0. 금지 import 검사
-    validate_no_anthropic_usage()
-
-    # 1. CLI 인자 파싱
-    args = _parse_args()
-
-    # 2. config 로드 + CLI 오버라이드
-    config = load_config(args.config)
+def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> None:
+    """Phase 2 파이프라인 (기존 bottom-up 로직)."""
     mode = args.mode or config.claude.mode
     input_path = Path(args.input).resolve() if args.input else config.paths.pdf_input
 
-    # 3. rich 콘솔 초기화
-    console = Console()
-    console.print(f"[bold]Paper Analyzer[/bold] — mode={mode}")
-
-    # 4. 입력 파싱
+    # 입력 파싱
     console.print(f"입력: {input_path}")
     if input_path.is_dir():
         parse_result = parse_arxiv(input_path)
@@ -110,17 +117,17 @@ def main() -> None:
         f"제목: {parse_result.title}, 길이: {len(parse_result.markdown)}자"
     )
 
-    # 5. chunking
+    # chunking
     roots = split_into_sections(parse_result.markdown)
     console.print(f"루트 섹션: {len(roots)}개")
 
-    # 6. 체크포인트 확인
+    # 체크포인트 확인
     cp_path = config.paths.checkpoints_dir / "latest.json"
     if args.resume and checkpoint.exists(cp_path):
         roots = checkpoint.load(cp_path)
         console.print(f"[yellow]체크포인트에서 재개: {cp_path}[/yellow]")
 
-    # 7. 의존성 조립
+    # 의존성 조립
     client = ClaudeClient(
         mode=mode,
         cli_path=config.claude.cli_path,
@@ -140,7 +147,6 @@ def main() -> None:
     )
 
     def save_callback(node):
-        """매 노드 완료 시 체크포인트 저장 + 진행 출력."""
         checkpoint.save(roots, cp_path)
         console.print(f"  [{node.status}] {node.concept}")
 
@@ -154,7 +160,7 @@ def main() -> None:
         on_node_done=save_callback,
     )
 
-    # 8. 확장
+    # 확장
     try:
         for root in roots:
             expander.expand(root)
@@ -165,10 +171,10 @@ def main() -> None:
         console.print("--resume 옵션으로 재개 가능")
         sys.exit(1)
 
-    # 9. 최종 체크포인트 저장
+    # 최종 체크포인트 저장
     checkpoint.save(roots, cp_path)
 
-    # 10. 가이드북 생성
+    # 가이드북 생성
     output_path = config.paths.output_dir / f"{parse_result.title}_해설.md"
     assemble(
         roots,
@@ -177,9 +183,157 @@ def main() -> None:
     )
     console.print(f"[green]가이드북 생성 완료: {output_path}[/green]")
 
-    # 11. 통계 출력
     stats = client.get_stats()
     console.print(f"통계: {stats}")
+
+
+def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> None:
+    """Phase 3 3-Part 가이드북 생성 파이프라인."""
+    mode = args.mode or config.claude.mode
+    input_path = Path(args.input).resolve() if args.input else config.paths.pdf_input
+    cache_dir = Path(args.cache_dir) if args.cache_dir else config.paths.cache_dir
+
+    client = ClaudeClient(
+        mode=mode,
+        cli_path=config.claude.cli_path,
+        max_total_calls=config.claude.max_total_calls,
+        timeout_seconds=config.claude.timeout_seconds,
+        sleep_between_calls=config.claude.sleep_between_calls,
+        cache_dir=cache_dir,
+    )
+
+    # 1. Parse
+    console.print(f"[1/7] 입력 파싱: {input_path}")
+    if input_path.is_dir():
+        parse_result = parse_arxiv(input_path)
+    elif input_path.suffix.lower() == ".pdf":
+        parse_result = parse_pdf(input_path)
+    else:
+        console.print(f"[red]지원하지 않는 입력 형식: {input_path}[/red]")
+        sys.exit(1)
+    markdown = parse_result.markdown
+    console.print(f"       파싱 완료: {len(markdown)} chars")
+
+    # 2. Analyze (Part 1 재료)
+    console.print("[2/7] 논문 분석 (Part 1)...")
+    try:
+        analysis = analyze_paper(markdown, client)
+    except ValueError:
+        # dry_run 모드에서 빈 응답 → 기본값으로 대체
+        analysis = PaperAnalysis(
+            title=parse_result.title or "Untitled",
+            core_thesis="(dry_run)",
+            problem_statement="(dry_run)",
+        )
+    console.print(f"       제목: {analysis.title}")
+
+    # 3. Chunk
+    console.print("[3/7] 섹션 분할...")
+    sections = split_into_raw_sections(markdown)
+    console.print(f"       {len(sections)} 섹션")
+
+    # 4. Expand (Part 2)
+    console.print("[4/7] 섹션 확장 (Part 2, top-down)...")
+    concept_cache = ConceptCache(
+        cache_dir=cache_dir / "concept_cache",
+        model_name=config.dedup.embedding_model,
+        threshold=config.dedup.similarity_threshold,
+    )
+    verifier = Verifier(
+        client=client,
+        min_confidence=config.verification.min_confidence,
+    )
+    expander = Expander(
+        client=client,
+        verifier=verifier,
+        cache=concept_cache,
+        max_depth=config.part2.max_depth,
+        max_children_per_node=config.part2.max_children_per_node,
+        max_retries=config.verification.max_retries,
+        on_node_done=lambda n: console.print(f"  [{n.status}] depth={n.depth} {n.concept}"),
+    )
+
+    from src.tree import ConceptNode
+    part2_trees = []
+    for section in sections:
+        root = ConceptNode(
+            concept=section.title,
+            source_excerpt=section.content,
+            depth=0,
+            part=2,
+        )
+        try:
+            expander.expand(root)
+        except RateLimitExceeded as e:
+            console.print(f"[red]할당량 초과: {e}[/red]")
+            console.print("[yellow]현재까지 결과로 계속 진행합니다.[/yellow]")
+            break
+        part2_trees.append(root)
+    console.print(f"       {len(part2_trees)} 루트 노드")
+
+    # 5. Collect prerequisites
+    console.print("[5/7] 기초 지식 주제 수집...")
+    topics = collect_prerequisites(
+        part2_trees,
+        config.part3.predefined_pool,
+        allow_new=config.part3.allow_claude_to_add,
+    )
+    console.print(f"       {len(topics)} 고유 주제")
+
+    # 6. Write Part 3
+    console.print("[6/7] Part 3 작성...")
+    part3_entries = []
+    for idx, topic in enumerate(topics, start=1):
+        section_num = f"3.{idx}"
+        try:
+            entry = write_part3_topic(topic, section_num, client)
+            part3_entries.append(entry)
+            console.print(f"  [done] {section_num} {topic.title}")
+        except RateLimitExceeded as e:
+            console.print(f"[red]할당량 초과: {e}[/red]")
+            console.print("[yellow]현재까지 결과로 계속 진행합니다.[/yellow]")
+            break
+        except Exception as e:
+            console.print(f"  [failed] {section_num} {topic.title}: {e}")
+    console.print(f"       {len(part3_entries)} 항목")
+
+    # 7. Assemble
+    console.print("[7/7] 3-Part 가이드북 조립...")
+    guidebook_md = assemble_3part_guidebook(analysis, part2_trees, part3_entries)
+
+    # Save
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        output_path = config.paths.output_dir / f"{analysis.title}_완전판_가이드북.md"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(guidebook_md, encoding='utf-8')
+    console.print(f"[green]완료: {output_path} ({len(guidebook_md)} chars)[/green]")
+
+    stats = client.get_stats()
+    console.print(f"통계: {stats}")
+
+
+def main() -> None:
+    """전체 파이프라인을 실행한다."""
+    # 0. 금지 import 검사
+    validate_no_anthropic_usage()
+
+    # 1. CLI 인자 파싱
+    args = _parse_args()
+
+    # 2. config 로드 + CLI 오버라이드
+    config = load_config(args.config)
+
+    # 3. rich 콘솔 초기화
+    console = Console()
+    console.print(f"[bold]Paper Analyzer[/bold] — phase={args.phase}")
+
+    # 4. 파이프라인 분기
+    if args.phase == 3:
+        run_phase3_pipeline(args, config, console)
+    else:
+        run_phase2_pipeline(args, config, console)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,12 @@ class ConceptNode:
     # 검증 결과
     verification: dict = field(default_factory=dict)
 
+    # === Phase 3 신규 필드 ===
+    part: int = 2              # 1, 2, 3 중 하나 (어느 Part에 속하는지)
+    ref_id: str | None = None  # Part 3 항목용 고유 ID (topic_id)
+    prerequisites: list[str] = field(default_factory=list)
+    # 이 노드가 explanation에서 참조한 topic_id 리스트
+
 
 def iter_dfs(root: ConceptNode) -> Iterator[ConceptNode]:
     """루트부터 DFS(전위 순회)로 모든 노드를 yield.

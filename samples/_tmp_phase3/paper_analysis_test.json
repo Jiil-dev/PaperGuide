@@ -1,0 +1,57 @@
+{
+  "title": "Attention Is All You Need",
+  "authors": [
+    "Ashish Vaswani",
+    "Noam Shazeer",
+    "Niki Parmar",
+    "Jakob Uszkoreit",
+    "Llion Jones",
+    "Aidan N. Gomez",
+    "Łukasz Kaiser",
+    "Illia Polosukhin"
+  ],
+  "year": 2017,
+  "core_thesis": "저자들은 기존 시퀀스 변환(sequence transduction) 모델의 핵심이었던 RNN(순환 신경망)과 CNN(합성곱 신경망)을 완전히 제거하고, 오직 attention mechanism(입력의 각 위치가 다른 모든 위치를 참조하여 중요도를 계산하는 방식)만으로 구성된 새로운 구조인 Transformer를 제안한다. 저자들은 Transformer가 번역 품질에서 기존 최고 성능을 뛰어넘으면서도, 병렬 처리가 훨씬 용이하여 학습 시간을 극적으로 단축할 수 있음을 주장한다. 구체적으로 8개의 P100 GPU에서 약 12시간만 학습해도 새로운 최고 성능(state of the art)에 도달할 수 있었다고 보고한다. 이 구조의 핵심은 Multi-Head Self-Attention이라는 메커니즘으로, 입력 시퀀스 내 모든 위치 쌍 사이의 관계를 한 번에 병렬로 계산할 수 있게 해준다.",
+  "problem_statement": "기존 시퀀스 변환의 주류 모델인 RNN(Recurrent Neural Network, 이전 단계의 출력을 다음 단계의 입력으로 넘기며 순차적으로 처리하는 신경망)은 본질적으로 순차적(sequential)이라는 근본적 한계를 가진다. 즉, 시간 단계 t의 은닉 상태(hidden state) h_t를 계산하려면 반드시 이전 단계 h_{t-1}이 먼저 계산되어야 하므로, GPU 등의 병렬 처리 하드웨어를 충분히 활용할 수 없다. 시퀀스가 길어질수록 이 문제는 더 심각해지며, 메모리 제약 때문에 배치(batch) 크기도 제한된다. Factorization trick이나 conditional computation 등으로 효율을 개선하려는 시도가 있었지만, 순차 계산이라는 근본 제약은 해결되지 않았다. 또한 기존의 attention mechanism은 거리에 관계없이 의존성을 모델링할 수 있는 장점이 있었으나, 거의 항상 RNN과 함께 결합되어 사용되었기 때문에 순차 계산의 병목에서 자유롭지 못했다.",
+  "key_contributions": [
+    "RNN과 CNN을 완전히 배제하고 오직 self-attention만으로 인코더-디코더 구조를 구성한 최초의 시퀀스 변환 모델인 Transformer 아키텍처를 제안했다.",
+    "Multi-Head Attention(여러 개의 attention을 병렬로 수행하여 서로 다른 표현 부분공간의 정보를 동시에 포착하는 기법)이라는 핵심 메커니즘을 도입하여, 단일 attention보다 풍부한 표현력을 확보했다.",
+    "Positional Encoding(위치 인코딩: 순환 구조 없이도 단어의 순서 정보를 모델에 제공하기 위해 사인/코사인 함수 기반의 위치 벡터를 입력에 더하는 방법)을 도입하여 순서 정보 부재 문제를 해결했다.",
+    "WMT 2014 영어-독일어 번역에서 BLEU 28.4, 영어-프랑스어 번역에서 BLEU 41.0이라는 당시 최고 성능을 달성하면서, 학습 비용은 기존 최고 모델 대비 극히 일부에 불과함을 실증했다.",
+    "Transformer 구조가 번역뿐 아니라 영어 구문 분석(constituency parsing) 등 다른 과제에도 성공적으로 일반화됨을 보여주었다."
+  ],
+  "main_results": [
+    "WMT 2014 영어-독일어 번역: BLEU 28.4로, 기존 최고 성능(앙상블 포함)을 2.0 BLEU 이상 초과하며 새로운 state of the art를 수립했다.",
+    "WMT 2014 영어-프랑스어 번역: BLEU 41.0으로 당시 단일 모델 최고 성능을 달성했으며, 학습 비용은 기존 최고 모델의 1/4 수준이었다.",
+    "Big Transformer 모델은 8개의 P100 GPU에서 3.5일(영어-프랑스어 기준) 학습으로 최고 성능에 도달했으며, base 모델은 약 12시간 만에 경쟁력 있는 성능을 달성했다.",
+    "Self-attention 레이어는 RNN 레이어 대비 계산 복잡도에서 시퀀스 길이가 표현 차원보다 작은 일반적 상황에서 더 빠르며, 최대 경로 길이(임의의 두 위치 사이 정보가 전달되는 최단 거리)가 O(1)로 장거리 의존성 학습에 유리하다.",
+    "영어 구문 분석(English constituency parsing) 과제에서도 과제 특화 튜닝 없이 기존 RNN 기반 모델과 경쟁하거나 능가하는 결과를 보여, Transformer의 일반화 능력을 입증했다."
+  ],
+  "significance": "이 논문은 자연어 처리(NLP) 분야의 패러다임을 근본적으로 전환한 논문이다. Transformer 아키텍처는 이후 BERT(양방향 사전학습 언어 모델), GPT 시리즈(생성형 사전학습 모델), T5 등 거의 모든 주요 언어 모델의 기반 구조가 되었으며, NLP를 넘어 컴퓨터 비전(Vision Transformer, ViT), 음성 인식, 단백질 구조 예측(AlphaFold) 등 다양한 분야로 확장되었다. 특히 '순환 구조 없이도 시퀀스를 효과적으로 처리할 수 있다'는 핵심 통찰은 대규모 병렬 학습을 가능케 하여, 이후 수십억~수천억 파라미터 규모의 대형 언어 모델(LLM) 시대를 여는 기술적 토대가 되었다. 인용 수 10만 회 이상(2026년 기준)으로, 현대 딥러닝 역사에서 가장 영향력 있는 논문 중 하나로 평가된다.",
+  "reading_guide": "이 가이드북은 다음 순서로 읽으시길 권합니다: (1) 먼저 core_thesis(핵심 주장)를 읽어 논문이 무엇을 말하고 싶은지 큰 그림을 잡으세요. (2) 그 다음 problem_statement(문제 정의)를 읽어 '왜 이 연구가 필요했는지' 기존의 한계를 이해하세요. (3) key_contributions(핵심 기여)를 통해 저자들이 문제를 어떻게 해결했는지 구체적 방법을 파악하세요. (4) main_results(주요 결과)에서 실제로 얼마나 효과가 있었는지 숫자로 확인하세요. (5) 마지막으로 significance(의의)를 읽어 이 논문이 이후 AI 분야에 어떤 파급력을 가졌는지 맥락을 이해하세요. 논문 원문을 읽으실 때는, Section 3(Model Architecture)의 Multi-Head Attention과 Positional Encoding 부분이 핵심이므로 가장 집중해서 읽으시고, Figure 1의 전체 아키텍처 그림을 항상 참조하면서 읽으시면 이해가 훨씬 수월합니다.",
+  "paper_structure": [
+    "Abstract",
+    "1 Introduction",
+    "2 Background",
+    "3 Model Architecture",
+    "3.1 Encoder and Decoder Stacks",
+    "3.2 Attention",
+    "3.2.1 Scaled Dot-Product Attention",
+    "3.2.2 Multi-Head Attention",
+    "3.2.3 Applications of Attention in our Model",
+    "3.3 Position-wise Feed-Forward Networks",
+    "3.4 Embeddings and Softmax",
+    "3.5 Positional Encoding",
+    "4 Why Self-Attention",
+    "5 Training",
+    "5.1 Training Data and Batching",
+    "5.2 Hardware and Schedule",
+    "5.3 Optimizer",
+    "5.4 Regularization",
+    "6 Results",
+    "6.1 Machine Translation",
+    "6.2 Model Variations",
+    "6.3 English Constituency Parsing",
+    "7 Conclusion"
+  ]
+}

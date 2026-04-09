@@ -59,13 +59,27 @@ claude --version
 - **PDF**: 단일 `.pdf` 파일
 - **압축 파일**: `.tar.gz`, `.tgz`, `.tar`, `.zip` 파일 (예: arXiv 에서 받은 소스 압축) — 자동 해제됩니다
 
-예를 들어, arXiv 에서 받은 소스 압축을 그대로 입력으로 줄 수 있습니다:
+### 가장 간단한 사용법
+
+`config.yaml` 의 기본값 (`cache` 모드, `data/cache` 디렉터리) 이 자동으로
+사용됩니다. input, output, phase 만 지정하면 됩니다:
 
 ```bash
 .venv/bin/python -m src.main \
-    --input ~/Downloads/arXiv-2304.13705v1.tar.gz \
+    --input data/papers/your_paper.tar.gz \
     --output samples/your_paper_guidebook.md \
-    --mode live \
+    --phase 3
+```
+
+### 기본값 덮어쓰기
+
+논문마다 별도의 cache 디렉터리를 쓰고 싶으면 (권장) 명시적으로
+`--cache-dir` 를 주세요:
+
+```bash
+.venv/bin/python -m src.main \
+    --input data/papers/your_paper.tar.gz \
+    --output samples/your_paper_guidebook.md \
     --cache-dir data/cache_your_paper \
     --phase 3
 ```
@@ -119,9 +133,15 @@ claude --version
 `config.yaml` 을 편집하여 생성 파라미터를 조정할 수 있습니다:
 
 ```yaml
+claude:
+  default_mode: cache              # CLI --mode 미지정 시 사용
+  default_cache_dir: data/cache    # CLI --cache-dir 미지정 시 사용
+  max_total_calls: 1500            # 한 실행당 Claude 호출 상한
+  sleep_between_calls: 3
+
 part2:
   max_depth: 2          # Part 2 의 최대 중첩 깊이 (헤더 Level 3~5)
-  max_children_per_node: 5
+  max_children_per_node: 3
 
 part3:
   max_topics: 15
@@ -130,11 +150,7 @@ part3:
 
 verification:
   min_confidence: 0.7    # 노드를 수락하는 최소 검증 신뢰도
-  max_retries: 1
-
-claude:
-  max_total_calls: 1500  # 한 실행당 Claude 호출 상한
-  sleep_between_calls: 3
+  max_retries: 0
 ```
 
 ## 작동 방식

@@ -59,13 +59,27 @@ Place your paper in any of these formats:
 - **PDF**: a single `.pdf` file
 - **Archive**: a `.tar.gz`, `.tgz`, `.tar`, or `.zip` file (e.g., the source download from arXiv) — automatically extracted
 
-For example, you can pass an arXiv source archive directly:
+### Simplest usage
+
+The defaults from `config.yaml` (`cache` mode, `data/cache` directory) are
+used automatically. You only need to specify input, output, and phase:
 
 ```bash
 .venv/bin/python -m src.main \
-    --input ~/Downloads/arXiv-2304.13705v1.tar.gz \
+    --input data/papers/your_paper.tar.gz \
     --output samples/your_paper_guidebook.md \
-    --mode live \
+    --phase 3
+```
+
+### Override defaults
+
+If you want a separate cache directory per paper (recommended for
+heavy use), explicitly pass `--cache-dir`:
+
+```bash
+.venv/bin/python -m src.main \
+    --input data/papers/your_paper.tar.gz \
+    --output samples/your_paper_guidebook.md \
     --cache-dir data/cache_your_paper \
     --phase 3
 ```
@@ -119,9 +133,15 @@ Headers are limited to Markdown Level 5 (`#####`) to preserve a "book reading" e
 Edit `config.yaml` to adjust generation parameters:
 
 ```yaml
+claude:
+  default_mode: cache              # CLI --mode 미지정 시 사용
+  default_cache_dir: data/cache    # CLI --cache-dir 미지정 시 사용
+  max_total_calls: 1500            # Hard cap on Claude calls per run
+  sleep_between_calls: 3
+
 part2:
   max_depth: 2          # Maximum nesting depth for Part 2 (header levels 3-5)
-  max_children_per_node: 5
+  max_children_per_node: 3
 
 part3:
   max_topics: 15
@@ -130,11 +150,7 @@ part3:
 
 verification:
   min_confidence: 0.7    # Minimum verifier confidence to accept a node
-  max_retries: 1
-
-claude:
-  max_total_calls: 1500  # Hard cap on Claude calls per run
-  sleep_between_calls: 3
+  max_retries: 0
 ```
 
 ## How it works

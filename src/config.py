@@ -51,9 +51,11 @@ class Verification(BaseModel):
 class Claude(BaseModel):
     """Claude CLI 호출 설정"""
     model_config = ConfigDict(extra="forbid")
-    
+
     cli_path: str = Field(default="claude")
     mode: Literal["live", "cache", "dry_run"] = Field(default="cache")
+    default_mode: Literal["live", "cache", "dry_run"] = Field(default="cache")
+    default_cache_dir: str = Field(default="data/cache")
     max_total_calls: int = Field(default=500, ge=1)
     timeout_seconds: int = Field(default=600, ge=1)
     sleep_between_calls: int = Field(default=3, ge=0)

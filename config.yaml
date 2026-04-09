@@ -26,7 +26,7 @@ dedup:
 
 # 자기검증
 verification:
-  max_retries: 1            # 검증 실패 시 재생성 1회만. 호출 수 폭발 방지.
+  max_retries: 0            # 검증 실패 시 재시도 안 함 (호출 수 절감)
   min_confidence: 0.7       # 이 이상이어야 통과. 너무 높이면 재생성 증가.
   check_types:
     - "hallucination"
@@ -41,6 +41,8 @@ claude:
                             # cache: 프롬프트 SHA-256 해시로 디스크 캐시. 디버깅 중 기본값.
                             # live: 실제 claude -p 호출. 최종 실행용.
                             # dry_run: 실제 호출 없이 스키마 기본값 반환. 파이프라인 검증용.
+  default_mode: "cache"     # CLI 에서 --mode 안 주면 이 값 사용
+  default_cache_dir: "data/cache"  # CLI 에서 --cache-dir 안 주면 이 값 사용
   max_total_calls: 1500     # Phase 3: 10~15x quota for 3-Part generation
   timeout_seconds: 600      # 단일 호출 타임아웃
   sleep_between_calls: 3    # 호출 간 대기(초). 속도 제한 완화.
@@ -66,7 +68,7 @@ part1:
 
 part2:
   max_depth: 2                # 이전 4 → 2 (헤더 Level 3~5 로 제한)
-  max_children_per_node: 5    # 한 노드의 최대 하위 논점 수
+  max_children_per_node: 3    # 한 노드의 최대 하위 논점 수 (호출 수 절감)
   use_placeholders: true      # 기초 지식 플레이스홀더 사용
 
 part3:

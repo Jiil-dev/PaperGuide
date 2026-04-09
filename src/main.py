@@ -177,8 +177,9 @@ def _parse_args() -> argparse.Namespace:
 
 def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> None:
     """Phase 2 파이프라인 (기존 bottom-up 로직)."""
-    mode = args.mode or config.claude.mode
+    mode = args.mode if args.mode is not None else config.claude.default_mode
     input_path = Path(args.input).resolve() if args.input else config.paths.pdf_input
+    cache_dir = Path(args.cache_dir) if args.cache_dir else Path(config.claude.default_cache_dir).resolve()
 
     # 입력 파싱
     console.print(f"입력: {input_path}")
@@ -204,10 +205,10 @@ def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> N
         max_total_calls=config.claude.max_total_calls,
         timeout_seconds=config.claude.timeout_seconds,
         sleep_between_calls=config.claude.sleep_between_calls,
-        cache_dir=config.paths.cache_dir,
+        cache_dir=cache_dir,
     )
     concept_cache = ConceptCache(
-        cache_dir=config.paths.cache_dir / "concept_cache",
+        cache_dir=cache_dir / "concept_cache",
         model_name=config.dedup.embedding_model,
         threshold=config.dedup.similarity_threshold,
     )
@@ -263,9 +264,9 @@ def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
 def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> None:
     """Phase 3 3-Part 가이드북 생성 파이프라인."""
-    mode = args.mode or config.claude.mode
+    mode = args.mode if args.mode is not None else config.claude.default_mode
     input_path = Path(args.input).resolve() if args.input else config.paths.pdf_input
-    cache_dir = Path(args.cache_dir) if args.cache_dir else config.paths.cache_dir
+    cache_dir = Path(args.cache_dir) if args.cache_dir else Path(config.claude.default_cache_dir).resolve()
 
     client = ClaudeClient(
         mode=mode,

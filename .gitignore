@@ -43,3 +43,14 @@ logs/
 
 # Claude Code local settings
 .claude/
+
+# ===== 개발 임시 산출물 =====
+backups/
+samples/_tmp_phase3/cache/
+samples/_tmp_phase3/end_to_end_log*.txt
+samples/_tmp_phase3/end_to_end_stats*.json
+samples/_tmp_phase3/expander*.json
+samples/_tmp_phase3/part3_topic_output.json
+samples/_tmp_phase3/verifier_5axis_test.json
+samples/_tmp_phase3/assembler_3part_output.md
+samples/_tmp_phase3/paper_analysis_test.json

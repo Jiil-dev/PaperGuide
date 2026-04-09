@@ -1,0 +1,217 @@
+# Paper Analyzer — 작업 인계 문서
+
+## 1. 프로젝트 현재 상태
+
+- **Phase**: Phase 2 진입 직후 (설정 파일 단계)
+- **완료**: 
+  - `CLAUDE.md` 작성 (출력 포맷 섹션 포함)
+  - `requirements.txt` 생성 (7개 패키지)
+  - Python/venv/pip 환경 준비 (WSL Ubuntu)
+- **미완료**:
+  - `.venv` 재생성 여부 확인 필요
+  - `pip install -r requirements.txt` 실행 및 검증
+  - `.gitignore` 생성
+  - `config.yaml` 생성
+  - `src/` 하위 코드 파일 전체 (아직 한 개도 없음)
+
+## 2. 환경 정보
+
+- WSL Ubuntu
+- 프로젝트 경로: `~/j0061/paper-analyzer` (공백 없음)
+- Python 3.10+ (`python-is-python3` 설치 완료)
+- Claude Code CLI: WSL 측에 설치되어 `claude --version` 동작 확인
+
+## 3. 확정된 핵심 설계 결정 (절대 뒤집지 말 것)
+
+### 3-1. 8가지 설계 보정 (전부 합의 완료)
+
+1. **claude_client.py 시그니처 확장**: `call(user_prompt, system_prompt, json_schema, ...)` 형태. `system_prompt` 필수 인자. `max_total_calls` 상한, `get_stats()` 메서드 포함.
+
+2. **3가지 모드 지원**: `ClaudeClient(mode="live"|"cache"|"dry_run")`. 
+   - `live`: 실제 `claude -p` 호출
+   - `cache`: 해시 기반 디스크 캐시 (`data/cache/claude_responses/<hash>.json`)
+   - `dry_run`: 스키마 기본값으로 가짜 응답
+   - 기본값은 `cache` (개발용), config.yaml의 `claude.mode`로 제어
+
+3. **verifier → expander 피드백 경로**: `expand_node(..., previous_errors: list[dict] | None = None)`. previous_errors가 있으면 "이전 답변의 오류: ... 수정해서 다시 작성하라"를 프롬프트 앞에 주입. 재생성 루프는 expander 내부에서 `verification.max_retries`회. 실패 시 노드에 `status="verification_failed"` 마킹 후 탐색 계속.
+
+4. **concept_cache.py 인터페이스**: 외부 메서드는 `lookup(concept_name, brief)`, `add(node_id, concept_name, brief)`, `check_ancestor_cycle(concept_name, ancestor_path)` 세 개만. 임베딩 계산은 내부에서만. 외부가 embedding_vec을 넘기는 설계 금지.
+
+5. **chunker.py가 ConceptNode 직접 반환**: `split_into_sections(markdown) -> list[ConceptNode]`. Section dict 중간 타입 만들지 말 것.
+
+6. **expander의 checkpoint 의존 제거**: 
+   - expander.py는 checkpoint 모듈을 절대 import하지 않는다.
+   - `expand_tree(..., on_node_done: Callable[[ConceptNode], None] | None = None)` 콜백만 받는다.
+   - 매 노드 확장(중복/실패 포함)이 끝날 때마다 `on_node_done(node)` 호출.
+   - 체크포인트 저장은 전적으로 main.py의 책임. main.py가 `lambda n: checkpoint.save(root, ...)` 형태로 콜백 주입.
+
+7. **validate_no_anthropic_usage()**: main.py 시작 시 src/ 전체를 검사. `import anthropic`, `ANTHROPIC_API_KEY`, `api.anthropic.com` 등의 패턴이 있으면 즉시 중단. CLAUDE.md 절대 규칙의 코드 안전핀.
+
+8. **assembler의 중복/실패 노드 렌더링**:
+   - `status == "duplicate"` 또는 `duplicate_of`가 설정된 노드: 본문 다시 쓰지 않고 `→ §<duplicate_of_id> "<원본 개념명>" 참조` 한 줄만.
+   - `status == "verification_failed"`: 설명 앞에 `> ⚠ 검증 실패 — 원문 대조 필요` 인용 블록 삽입.
+
+### 3-2. 캐시 해시 정책 (claude_client.py)
+
+- 해시 알고리즘: **SHA-256** (MD5 금지)
+- 해시 입력 = 아래 4개의 연결:
+  1. `system_prompt` 전문
+  2. `user_prompt` 전문
+  3. `json.dumps(json_schema, sort_keys=True)`
+  4. `CLAUDE_CLIENT_VERSION = "1"` (클라이언트 상수, 프롬프트 템플릿/스키마 수정 시 +1로 캐시 일괄 무효화)
+- 캐시 경로: `data/cache/claude_responses/<sha256>.json`
+- 손상된 캐시 파일(json.loads 실패)은 조용히 무시하고 live 폴백
+
+### 3-3. 출력 포맷 결정
+
+- **최종 산출물은 Markdown(.md)만 생성**
+- PDF/HTML/EPUB 변환은 본 프로젝트 범위 밖
+- assembler.py에 pandoc, weasyprint, reportlab 등 PDF 관련 코드 금지
+- 향후 PDF 필요하면 별도 스크립트(`scripts/md_to_pdf.sh`)로 분리
+
+### 3-4. 목표 독자 수준
+
+- 학부 1학년
+- 배경지식: 고등학교 수학2(미적분 기초), 고등학교 물리1, 기초 프로그래밍
+- 선형대수/확률/머신러닝/딥러닝 전혀 모름
+- 이 기준을 expander의 시스템 프롬프트와 leaf 판정 규칙에 반영
+
+### 3-5. 입력 파서 전략
+
+입력 파서는 두 가지 모듈로 분리된다:
+
+**(1) pdf_parser.py** — 일반 PDF 입력 처리
+- 사용 라이브러리: `pymupdf4llm`
+- 용도: 수식이 적은 텍스트 중심 논문, 블로그, 리포트
+- 한계: 수식이 PDF 내부에서 이미지/벡터 그래픽으로 렌더링된 경우,
+  `**==> picture [W x H] intentionally omitted <==**` placeholder로 누락됨
+- 2026-04-08 distillation.pdf (9페이지, 수식 거의 없음)에서 정상 동작 확인
+- 2026-04-08 attention.pdf (15페이지, 수식 밀집)에서 핵심 수식 누락 확인
+
+**(2) arxiv_parser.py** — arXiv TeX 소스 입력 처리 (구현 완료)
+- 사용: 표준 라이브러리 (정규식 기반)
+- 용도: arXiv에 올라온 AI 논문 (주 입력 경로)
+- 입력: 디렉터리 경로 (압축 해제된 .tex 파일 모음)
+- 수식 보존: LaTeX 원본 그대로 유지 (완벽)
+- 2026-04-08 Attention Is All You Need (arXiv 1706.03762) 소스로 검증:
+  `\mathrm{Attention}(Q,K,V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V` 확인
+
+**입력 형식 판정 (main.py가 수행):**
+- 경로가 `.pdf`로 끝나면 → pdf_parser 호출
+- 경로가 디렉터리이면 → arxiv_parser 호출
+
+**테스트 데이터 위치 (git 추적 안 됨):**
+- `data/papers/distillation.pdf` — pdf_parser 테스트용
+- `data/papers/attention/` — arxiv_parser 테스트용 (arXiv 1706.03762 TeX 소스)
+- 다른 머신에서 재현 시 이 두 파일을 수동으로 받아서 같은 위치에 배치.
+
+**arxiv_parser.py의 알려진 한계 (2026-04-08 기준):**
+
+다음 케이스는 현재 버전이 완벽하게 처리하지 못한다. Attention 논문
+(arXiv 1706.03762)에서는 문제되지 않았으나, 다른 논문에서 발생하면
+보정이 필요할 수 있다.
+
+1. **2-인자 LaTeX 명령**: `\href{url}{text}` 같은 형태는 URL만 남고
+   text 부분이 부정확하게 처리됨. _cleanup_unknown_commands가 첫 번째
+   인자만 남기기 때문.
+
+2. **사용자 정의 매크로 미확장**: `\newcommand{\dmodel}{...}` 같은
+   정의는 제거되지만, 본문의 `\dmodel` 사용 위치는 확장되지 않음.
+   인자 없는 매크로는 원본 텍스트로 유지되고, 인자 있는 매크로는
+   _cleanup_unknown_commands에 의해 콘텐츠만 남을 수 있음. 대부분의
+   사용자 매크로는 수식 내부에 있어 수식 보호로 안전.
+
+3. **테이블 내부 `\\` 행 구분자**: `\begin{table}` 환경은 보존되지만
+   내부의 `\\`는 전역 치환에 의해 줄바꿈으로 바뀌어 행 구조가 부분
+   손실될 수 있음. 수식 환경과 달리 table 환경은 _protect_math의
+   보호 범위가 아니기 때문.
+
+4. **중복 `\author` 블록**: 첫 번째 `\author{...}`만 제거됨. 여러
+   `\author` 블록이 있는 논문은 두 번째부터 남을 수 있음.
+
+이 한계들은 "작동하는 코드를 미리 고치지 마라" 원칙에 따라 당장
+보정하지 않고, 실제 문제가 발생한 논문이 나오면 그때 잡는다.
+
+### 3-6. expander 시스템 프롬프트 요구사항 (verifier 테스트에서 발견)
+
+verifier의 실제 호출 테스트(2026-04-08)에서 확인된, expander가 생성하는
+explanation이 반드시 지켜야 할 규칙:
+
+1. **전문 용어는 반드시 풀어쓰기**: "softmax", "어텐션 메커니즘" 같은
+   전문 용어는 처음 등장 시 학부 1학년 수준 풀이 병기.
+   예: "softmax(각 값을 0~1 사이 확률로 변환하는 함수)"
+
+2. **source_excerpt에 없는 정보 금지**: 외부 지식으로 보충하지 말 것.
+   source_excerpt에 scaling 이유가 없으면 explanation에도 없어야 함.
+   배경 지식이 필요하면 자식 노드로 분리.
+
+3. **이 규칙들을 expander의 system_prompt에 명시적으로 포함**.
+
+### 3-7. Phase 2 완료 상태 (2026-04-08)
+
+**12/12 모듈 완성**:
+1. config.py — Pydantic 설정 로더
+2. tree.py — ConceptNode dataclass + DFS 헬퍼
+3. pdf_parser.py — PDF → Markdown (pymupdf4llm)
+4. arxiv_parser.py — LaTeX 소스 → Markdown (수식 보존)
+5. chunker.py — Markdown → ConceptNode 계층 트리
+6. concept_cache.py — 3단계 중복/순환 차단
+7. claude_client.py — subprocess 기반 claude -p 래퍼
+8. verifier.py — 4축 검증 (원문/수준/자기충족/수식)
+9. expander.py — DFS 재귀 확장 + 재시도
+10. checkpoint.py — JSON 직렬화/재개
+11. assembler.py — Markdown 가이드북 렌더러
+12. main.py — CLI 진입점 + 오케스트레이션
+
+**End-to-end 검증 (2026-04-08)**:
+- 입력: data/papers/attention_mini/ (Abstract + Introduction만, 2.7KB)
+- 모드: cache
+- 제한: max_depth=2, max_children=3, max_total_calls=15 → 초과 후 200으로 --resume
+- 결과: 22 노드 전부 처리 (done 21, duplicate 1), 20KB 한국어 가이드북 생성
+- 검증: concept_cache 임베딩 dedup, --resume 재개, 수식 보존, 계층 구조 전부 확인
+
+**알려진 개선 여지 (향후)**:
+1. depth=max_depth 노드의 explanation이 빈 문자열 → assembler에서 플레이스홀더 렌더링 또는 expander에서 간단한 설명 생성
+2. Abstract가 과도하게 확장되는 경향 → expander system_prompt에 "Abstract는 요약이므로 is_leaf=True 우선 고려" 추가
+3. 비슷한 concept의 임베딩 유사도가 threshold 이하로 떨어지는 경우 중복 미감지 → 실제 논문 돌려보며 threshold 튜닝 (현재 0.88)
+4. arxiv_parser의 \href, \newcommand 미지원 (HANDOFF.md 3-5 "알려진 한계" 참조)
+
+## 4. 모듈 설계 요약 (각 파일의 책임)
+
+- `config.py`: YAML 로드, Pydantic v2 검증, 경로 자동 생성
+- `pdf_parser.py`: PDF → 수식 포함 Markdown (pymupdf4llm)
+- `chunker.py`: Markdown → ConceptNode 리스트 (헤더 기반)
+- `tree.py`: ConceptNode 데이터클래스 (concept, source_excerpt, explanation, is_leaf, depth, parent_id, children, status, duplicate_of, failed_errors, verification)
+- `concept_cache.py`: 3단계 중복 차단 (해시 → 임베딩 유사도 ≥0.88 → 조상 경로 순환)
+- `claude_client.py`: subprocess로 `claude -p` 호출, 3모드 지원, JSON schema 강제, tenacity 재시도, 호출 상한
+- `expander.py`: DFS 재귀 확장, on_node_done 콜백, previous_errors 피드백 루프
+- `verifier.py`: 별도 Claude 호출로 hallucination/omission/contradiction/math_error 검출
+- `checkpoint.py`: 트리 JSON 직렬화/역직렬화 (main에서만 호출)
+- `assembler.py`: DFS 순회로 Markdown 책 생성, 중복/실패 노드 특별 렌더링
+- `main.py`: argparse, 체크포인트 재개 분기, validate_no_anthropic_usage, expander에 콜백 주입
+
+## 5. 다음 세션이 가장 먼저 해야 할 일
+
+1. 현재 `.venv` 상태 확인 (`ls -la .venv`)
+2. 필요하면 `.venv` 재생성: `rm -rf .venv && python -m venv .venv && source .venv/bin/activate`
+3. `pip install --upgrade pip setuptools wheel`
+4. `pip install -r requirements.txt`
+5. 설치 검증: `pip list | grep -iE "pymupdf|sentence-transformers|numpy|pyyaml|tenacity|rich|pydantic|torch"`
+6. 설치 성공하면 `.gitignore` 생성 단계로 진입
+
+## 6. 절대 하지 말 것 (Claude가 자의적으로 저지르기 쉬운 실수)
+
+- `anthropic` Python SDK import, API 키 사용, `api.anthropic.com` 호출 → **전부 금지**, CLAUDE.md 참조
+- 설계 합의 없이 파일 여러 개 동시 생성
+- 테스트 프레임워크(pytest 등) 추가
+- Docker/CI/README 생성 (README는 맨 마지막)
+- PDF 변환 코드(pandoc, weasyprint 등) 추가
+- 한 파일을 작성한 뒤 "다음 파일도 바로 만들겠다"며 허락 없이 이어가기
+
+## 7. 작업 규칙 (CLAUDE.md에서 재확인)
+
+- 새 파일 만들기 전에 책임과 인터페이스를 한국어로 요약해서 사용자에게 OK 받기
+- 코드 작성 직후 `python -c "import src.<모듈>"` import 테스트
+- 외부 호출(claude -p, 모델 다운로드) 필요하면 사용자에게 먼저 묻기
+- 의미 있는 단위 끝날 때마다 git commit 제안
+- 모르는 건 추측하지 말고 물어보기

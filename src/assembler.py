@@ -253,9 +253,13 @@ def assemble_3part_guidebook(
     return "\n".join(lines)
 
 
+_MAX_HEADER_LEVEL = 6  # Markdown 표준 상한
+
+
 def _render_part2_node(lines: list[str], node: ConceptNode, section_num: str, depth: int) -> None:
     """Part 2 노드를 재귀적으로 Markdown 으로 렌더링."""
-    heading_level = "#" * (3 + depth)  # ### for depth=0, #### for depth=1, ...
+    level = min(3 + depth, _MAX_HEADER_LEVEL)
+    heading_level = "#" * level
     lines.append(f"{heading_level} {section_num} {node.concept}\n")
 
     if node.explanation:

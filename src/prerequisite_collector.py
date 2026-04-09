@@ -14,10 +14,25 @@ def _walk(node: ConceptNode):
         yield from _walk(child)
 
 
+def _normalize_topic_id(topic_id: str) -> str:
+    """topic_id 정규화: 명백한 중복 (단/복수, basics 접미사) 통일."""
+    tid = topic_id.lower().strip()
+    # 복수형 → 단수형 (단, ss 로 끝나는 건 제외: classes, basis 등)
+    if tid.endswith("s") and not tid.endswith("ss") and len(tid) > 3:
+        tid = tid[:-1]
+    # _basics, _basic 접미사 제거
+    for suffix in ["_basics", "_basic"]:
+        if tid.endswith(suffix):
+            tid = tid[: -len(suffix)]
+            break
+    return tid
+
+
 def collect_prerequisites(
     part2_nodes: list[ConceptNode],
     predefined_pool: list,  # list[PrerequisitePoolItem] but avoid circular import
     allow_new: bool = True,
+    max_topics: int = 15,
 ) -> list[PrerequisiteTopic]:
     """Part 2 트리에서 모든 기초 지식 주제를 수집하고 중복 제거한다.
 
@@ -25,23 +40,26 @@ def collect_prerequisites(
         part2_nodes: Part 2 루트 노드 리스트.
         predefined_pool: config.part3.predefined_pool (PrerequisitePoolItem 리스트).
         allow_new: 풀에 없는 topic_id도 허용할지.
+        max_topics: 반환할 최대 주제 수. config.part3.max_topics.
 
     Returns:
-        PrerequisiteTopic 리스트. 풀 순서 우선, 나머지는 알파벳 순.
+        PrerequisiteTopic 리스트. 풀 순서 우선, 나머지는 알파벳 순. max_topics 이하.
     """
-    # 풀을 topic_id → title 맵으로 변환 + 순서 기억
+    # 풀을 정규화된 topic_id → title 맵으로 변환 + 순서 기억
     pool_map: dict[str, str] = {}
     pool_order: dict[str, int] = {}
     for idx, item in enumerate(predefined_pool):
-        pool_map[item.id] = item.title
-        pool_order[item.id] = idx
+        normalized_id = _normalize_topic_id(item.id)
+        pool_map[normalized_id] = item.title
+        pool_order[normalized_id] = idx
 
-    # 수집용 딕셔너리: topic_id → {title, first_mention, all_mentions}
+    # 수집용 딕셔너리: 정규화된 topic_id → {title, first_mention, all_mentions}
     collected: dict[str, dict] = {}
 
     for root in part2_nodes:
         for node in _walk(root):
-            for topic_id in node.prerequisites:
+            for raw_topic_id in node.prerequisites:
+                topic_id = _normalize_topic_id(raw_topic_id)
                 if topic_id not in collected:
                     # 제목 결정
                     if topic_id in pool_map:
@@ -73,7 +91,7 @@ def collect_prerequisites(
             all_mentions=info["all_mentions"],
         ))
 
-    # 정렬: 풀 순서 우선, 나머지는 topic_id 알파벳 순
+    # 정렬: 풀 순서 우선, 나머지는 알파벳 순
     def _sort_key(t: PrerequisiteTopic):
         if t.topic_id in pool_order:
             return (0, pool_order[t.topic_id])
@@ -81,4 +99,6 @@ def collect_prerequisites(
             return (1, t.topic_id)
 
     topics.sort(key=_sort_key)
-    return topics
+
+    # max_topics 강제 적용 (predefined_pool 항목이 우선 보존됨)
+    return topics[:max_topics]

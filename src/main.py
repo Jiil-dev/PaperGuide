@@ -347,6 +347,7 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
         part2_trees,
         config.part3.predefined_pool,
         allow_new=config.part3.allow_claude_to_add,
+        max_topics=config.part3.max_topics,
     )
     console.print(f"       {len(topics)} 고유 주제")
 

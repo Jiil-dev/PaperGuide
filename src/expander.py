@@ -41,9 +41,52 @@ topic_id 규칙:
   optimization_basics, regularization
 - 풀에 없는 주제도 자유롭게 만들 수 있음 (예: batch_normalization)
 
-### 원칙 3 — 하위 논점 분해
-각 섹션을 2~5 개의 "저자가 하는 하위 논점" 으로 분해하십시오.
-각 논점이 자식 노드가 됩니다. 각 자식은 다시 재귀적으로 분해됩니다.
+### 원칙 3 — 하위 논점은 문단으로, 자식 노드는 얕게
+
+중요: 독자는 책을 읽는 것이지 사양서를 읽는 것이 아닙니다.
+3 단계 이상의 목차 구조는 독자가 "지금 어디 있는지" 를 잃게 만듭니다.
+
+자식 노드를 만드는 기준은 매우 엄격합니다:
+- 논문이 **명시적으로 subsection 을 나눈 경우만** (예: "3.1 Encoder", "3.2 Attention")
+- 또는 섹션이 매우 길어서 **독립된 여러 주제** 를 다루는 경우
+- 각 자식은 **200 자 이상의 충분한 explanation** 을 가져야 함
+
+자식 노드를 만들면 안 되는 경우:
+- 단순히 "세 가지 관점", "네 가지 한계" 를 나열
+- 짧은 하위 논점 (100 자 미만으로 설명 가능한 것)
+- 부모 문단 안에서 자연스럽게 이어지는 흐름
+
+**올바른 방식**: 하위 논점이 여러 개 있으면 **부모 노드의 explanation 안에서
+문단으로 전개**하십시오. 각 논점의 시작은 **굵은 글씨** 로 표시할 수 있습니다.
+
+예시 — 나쁨 (자식 노드 3 개):
+  부모 explanation: "저자는 세 가지 한계를 지적한다."
+  자식 1: "첫째 한계: 순차 연산"
+  자식 2: "둘째 한계: 병렬화 불가"
+  자식 3: "셋째 한계: 장거리 의존성"
+
+예시 — 좋음 (부모 안에 문단):
+  부모 explanation: "저자는 RNN 의 세 가지 구조적 한계를 연속적으로 지적한다.
+
+  **첫째, 순차 의존 구조.** 저자가 가장 먼저 지목하는 것은 은닉 상태 연쇄다.
+  시간 t 의 상태 h_t 를 계산하려면 반드시 h_{t-1} 이 먼저 계산되어야 하고,
+  이 의존성은 건너뛸 수 없다...
+
+  **둘째, GPU 병렬화 불가.** 이 순차 의존 때문에 저자는 GPU 의 병렬 연산 능력을
+  활용할 수 없다고 주장한다...
+
+  **셋째, 장거리 의존성 학습 곤란.** 마지막으로 저자는 시퀀스가 길수록 먼 위치 간의
+  의미 관계를 학습하기 어려움을 지적한다..."
+
+depth 제한:
+- 현재 depth 가 0 이면 자식 생성 허용 (논문 subsection 해설)
+- 현재 depth 가 1 이면 자식 생성 신중하게 (꼭 필요한 경우만)
+- 현재 depth 가 2 이상이면 자식 생성 금지. is_leaf=true, children=[] 로 응답.
+
+explanation 분량:
+- depth=0 (논문 섹션 루트): 3~6 문단, 각 문단 3~5 문장
+- depth=1 (subsection): 2~4 문단, 각 문단 3~5 문장
+- depth=2 (leaf): 1~3 문단, 충실하게
 
 ### 원칙 4 — 실험 섹션은 자세히
 Training, Results, Experiments 같은 섹션은 특히 자세히 해설:
@@ -57,6 +100,21 @@ Training, Results, Experiments 같은 섹션은 특히 자세히 해설:
 
 ### 원칙 6 — 구체성
 "중요한 개선", "혁신적" 같은 모호한 수사 금지. 구체적 용어와 수치 사용.
+
+### 원칙 7 — 논문의 모든 섹션은 빠짐없이 해설
+
+논문에 Abstract 가 있다면 Part 2 에도 Abstract 해설이 반드시 있어야 합니다.
+"Part 1 에서 이미 다뤘으니 생략" 은 **절대 금지**.
+
+Part 1 은 논문 전체의 큰 그림이고, Part 2 각 섹션은 **저자가 그 섹션을 어떻게 썼는지**
+에 대한 해설입니다. 역할이 다릅니다.
+
+예시 — Abstract 해설:
+- 저자가 Abstract 에 **무엇을 강조** 하고 있는가? (전체 논문 중 어느 부분을 골라냈는가)
+- 저자가 어떤 **순서** 로 주장을 배치했는가?
+- 특정 문구 (예: "based solely on attention mechanisms") 가 왜 그런 표현인가?
+
+explanation 이 비어 있으면 안 됩니다. 최소 3 문단 이상.
 
 ## 절대 금지
 - 원문에 없는 사실 날조
@@ -284,7 +342,16 @@ class Expander:
 
                 # Claude 호출
                 result = self._call_expand(root, allow_new_children, previous_errors)
-                root.explanation = result.get("explanation", "")
+                explanation = result.get("explanation", "").strip()
+
+                # 빈 explanation 방어
+                if not explanation:
+                    raise ValueError(
+                        f"expander: empty explanation for '{root.concept}' "
+                        f"(depth={root.depth})"
+                    )
+
+                root.explanation = explanation
                 root.prerequisites = result.get("prerequisites", [])
 
                 if result.get("is_leaf", False):

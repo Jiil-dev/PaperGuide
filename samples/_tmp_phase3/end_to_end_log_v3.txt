@@ -1,0 +1,63 @@
+Paper Analyzer — phase=3
+[1/7] 입력 파싱: /home/engineer/j0061/paper-analyzer/data/papers/attention_mini
+       파싱 완료: 2723 chars
+[2/7] 논문 분석 (Part 1)...
+       제목: Attention Is All You Need
+[3/7] 섹션 분할...
+       2 섹션
+[4/7] 섹션 확장 (Part 2, top-down)...
+   depth=0 Abstract
+   depth=1 기존 패러다임 규정
+   depth=2 뼈대로서의 RNN/CNN 인코더-디코더
+   depth=2 보조 모듈로서의 어텐션 메커니즘
+   depth=2 수사적 대비 설정
+   depth=1 Transformer 제안의 핵심 차별점
+   depth=2 순환·합성곱의 완전 제거 선언
+   depth=2 solely on attention의 전략적 표현
+   depth=2 simple이라는 수식어의 이중 메시지
+   depth=1 실험 결과의 압축 제시
+   depth=2 세 가지 이점의 선택 근거
+   depth=2 한 문장 압축의 수사적 효과
+   depth=2 본문 실험과의 연결 구조
+   depth=0 Introduction
+   depth=1 RNN 계열 모델의 지배적 위치와 순차 연산의 한계
+   depth=2 RNN 계열의 지배적 위상 인정
+   depth=2 순차적 은닉 상태 의존성
+   depth=2 긴 시퀀스에서의 악순환
+   depth=1 기존 효율화 시도의 불충분함
+   depth=2 기존 기법들의 실질적 성과 인정
+   depth=2 순차 연산 제약의 미해소
+   depth=1 어텐션 메커니즘의 가능성과 RNN 종속 문제
+   depth=2 어텐션의 거리 무관 의존성 모델링
+   depth=2 RNN 보조 장치로서의 어텐션 관행 비판
+   depth=2 어텐션 단독 모델의 정당성 확보
+   depth=1 Transformer의 제안과 구체적 성과
+   depth=2 순환 구조 완전 제거 선언
+   depth=2 훈련 효율성과 성능의 동시 달성
+   depth=2 제안과 실증의 결합 서술 전략
+       2 루트 노드
+[5/7] 기초 지식 주제 수집...
+       17 고유 주제
+[6/7] Part 3 작성...
+   3.1 신경망의 기초
+   3.2 벡터와 내적
+   3.3 행렬 곱셈
+   3.4 RNN, LSTM, GRU
+   3.5 CNN의 기초
+   3.6 Encoder-Decoder 패러다임
+   3.7 Attention 메커니즘의 역사
+   3.8 최적화 기법
+   3.9 Bert Overview
+   3.10 Bleu Score
+   3.11 Conditional Computation
+   3.12 Ensemble Methods
+   3.13 Floating Point Operations
+   3.14 Flops
+   3.15 Gpu Parallel Computing
+   3.16 Matrix Factorization
+   3.17 Wmt Benchmark
+       17 항목
+[7/7] 3-Part 가이드북 조립...
+완료: samples/_tmp_phase3/end_to_end_attention_mini_v3.md (126481 chars)
+통계: {'total_calls': 86, 'cache_hits': 0, 'cache_misses': 86, 'dry_run_calls': 
+0}

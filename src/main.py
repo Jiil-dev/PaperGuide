@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
+import tarfile
+import tempfile
+import zipfile
 from pathlib import Path
 
 from rich.console import Console
@@ -22,6 +26,78 @@ from src.part3_writer import write_part3_topic
 from src.pdf_parser import parse_pdf
 from src.prerequisite_collector import collect_prerequisites
 from src.verifier import Verifier
+
+
+def _is_archive(path: Path) -> bool:
+    """압축 파일인지 판정한다."""
+    name = path.name.lower()
+    return (
+        name.endswith(".tar.gz")
+        or name.endswith(".tgz")
+        or name.endswith(".tar")
+        or name.endswith(".zip")
+    )
+
+
+def _extract_archive(archive_path: Path) -> Path:
+    """압축 파일을 임시 디렉터리에 풀고 그 경로를 반환한다.
+
+    호출자가 작업 후 shutil.rmtree()로 정리해야 한다.
+
+    Args:
+        archive_path: .tar.gz, .tgz, .tar, .zip 파일 경로.
+
+    Returns:
+        압축 해제된 디렉터리 경로.
+
+    Raises:
+        ValueError: 지원하지 않는 형식.
+    """
+    extracted = Path(tempfile.mkdtemp(prefix="paperguide_extract_"))
+    name = archive_path.name.lower()
+
+    if name.endswith((".tar.gz", ".tgz", ".tar")):
+        with tarfile.open(archive_path) as tar:
+            tar.extractall(extracted, filter="data")
+    elif name.endswith(".zip"):
+        with zipfile.ZipFile(archive_path) as zf:
+            zf.extractall(extracted)
+    else:
+        shutil.rmtree(extracted, ignore_errors=True)
+        raise ValueError(f"지원하지 않는 압축 형식: {archive_path}")
+
+    # 단일 최상위 폴더가 있으면 그 안으로 들어감 (arXiv 관습)
+    contents = list(extracted.iterdir())
+    if len(contents) == 1 and contents[0].is_dir():
+        return contents[0]
+    return extracted
+
+
+def _parse_input(input_path: Path, console: Console):
+    """입력 경로를 파싱하여 (ParseResult, temp_dir_or_None)을 반환한다."""
+    extracted_temp_dir = None
+
+    if input_path.is_dir():
+        parse_result = parse_arxiv(input_path)
+    elif input_path.suffix.lower() == ".pdf":
+        parse_result = parse_pdf(input_path)
+    elif _is_archive(input_path):
+        console.print(f"       압축 파일 감지: {input_path.name}")
+        console.print("       임시 디렉터리에 압축 해제 중...")
+        extracted_dir = _extract_archive(input_path)
+        # 정리용 최상위 temp 디렉터리 기록
+        if extracted_dir.parent.name.startswith("paperguide_extract_"):
+            extracted_temp_dir = extracted_dir.parent
+        else:
+            extracted_temp_dir = extracted_dir
+        console.print(f"       해제 완료: {extracted_dir}")
+        parse_result = parse_arxiv(extracted_dir)
+    else:
+        console.print(f"[red]지원하지 않는 입력 형식: {input_path}[/red]")
+        console.print("지원 형식: 디렉터리, .pdf, .tar.gz, .tgz, .tar, .zip")
+        sys.exit(1)
+
+    return parse_result, extracted_temp_dir
 
 
 def validate_no_anthropic_usage() -> None:
@@ -106,13 +182,7 @@ def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
     # 입력 파싱
     console.print(f"입력: {input_path}")
-    if input_path.is_dir():
-        parse_result = parse_arxiv(input_path)
-    elif input_path.suffix.lower() == ".pdf":
-        parse_result = parse_pdf(input_path)
-    else:
-        console.print(f"[red]지원하지 않는 입력 형식: {input_path}[/red]")
-        sys.exit(1)
+    parse_result, extracted_temp_dir = _parse_input(input_path, console)
     console.print(
         f"제목: {parse_result.title}, 길이: {len(parse_result.markdown)}자"
     )
@@ -186,6 +256,10 @@ def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> N
     stats = client.get_stats()
     console.print(f"통계: {stats}")
 
+    # 임시 디렉터리 정리
+    if extracted_temp_dir is not None and extracted_temp_dir.exists():
+        shutil.rmtree(extracted_temp_dir, ignore_errors=True)
+
 
 def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> None:
     """Phase 3 3-Part 가이드북 생성 파이프라인."""
@@ -204,13 +278,7 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
     # 1. Parse
     console.print(f"[1/7] 입력 파싱: {input_path}")
-    if input_path.is_dir():
-        parse_result = parse_arxiv(input_path)
-    elif input_path.suffix.lower() == ".pdf":
-        parse_result = parse_pdf(input_path)
-    else:
-        console.print(f"[red]지원하지 않는 입력 형식: {input_path}[/red]")
-        sys.exit(1)
+    parse_result, extracted_temp_dir = _parse_input(input_path, console)
     markdown = parse_result.markdown
     console.print(f"       파싱 완료: {len(markdown)} chars")
 
@@ -313,6 +381,10 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
     stats = client.get_stats()
     console.print(f"통계: {stats}")
+
+    # 임시 디렉터리 정리
+    if extracted_temp_dir is not None and extracted_temp_dir.exists():
+        shutil.rmtree(extracted_temp_dir, ignore_errors=True)
 
 
 def main() -> None:

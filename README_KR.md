@@ -53,13 +53,19 @@ claude --version
 
 ## 빠른 시작
 
-논문을 `data/papers/<논문이름>/` 폴더에 넣으세요 (arXiv 소스 폴더의 `.tex` 파일들이거나, PDF 를 폴더에 직접 두어도 됩니다).
+논문을 다음 형식 중 하나로 준비하세요:
+
+- **디렉터리**: arXiv 소스 폴더 (`.tex` 파일들 포함, 예: `data/papers/your_paper/`)
+- **PDF**: 단일 `.pdf` 파일
+- **압축 파일**: `.tar.gz`, `.tgz`, `.tar`, `.zip` 파일 (예: arXiv 에서 받은 소스 압축) — 자동 해제됩니다
+
+예를 들어, arXiv 에서 받은 소스 압축을 그대로 입력으로 줄 수 있습니다:
 
 ```bash
 .venv/bin/python -m src.main \
-    --input data/papers/your_paper \
+    --input ~/Downloads/arXiv-2304.13705v1.tar.gz \
     --output samples/your_paper_guidebook.md \
-    --mode cache \
+    --mode live \
     --cache-dir data/cache_your_paper \
     --phase 3
 ```

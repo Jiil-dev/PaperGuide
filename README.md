@@ -53,13 +53,19 @@ claude --version
 
 ## Quick start
 
-Place your paper in `data/papers/<paper_name>/` (either an arXiv source folder with `.tex` files, or put the PDF directly in the folder).
+Place your paper in any of these formats:
+
+- **Directory**: an arXiv source folder with `.tex` files (e.g., `data/papers/your_paper/`)
+- **PDF**: a single `.pdf` file
+- **Archive**: a `.tar.gz`, `.tgz`, `.tar`, or `.zip` file (e.g., the source download from arXiv) — automatically extracted
+
+For example, you can pass an arXiv source archive directly:
 
 ```bash
 .venv/bin/python -m src.main \
-    --input data/papers/your_paper \
+    --input ~/Downloads/arXiv-2304.13705v1.tar.gz \
     --output samples/your_paper_guidebook.md \
-    --mode cache \
+    --mode live \
     --cache-dir data/cache_your_paper \
     --phase 3
 ```

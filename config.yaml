@@ -65,7 +65,7 @@ part1:
   max_main_results: 5
 
 part2:
-  max_depth: 4                # 섹션 내 최대 세부 단계
+  max_depth: 2                # 이전 4 → 2 (헤더 Level 3~5 로 제한)
   max_children_per_node: 5    # 한 노드의 최대 하위 논점 수
   use_placeholders: true      # 기초 지식 플레이스홀더 사용
 

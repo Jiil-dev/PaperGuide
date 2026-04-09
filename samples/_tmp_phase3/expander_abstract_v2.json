@@ -1,0 +1,14 @@
+{
+  "concept": "Abstract",
+  "explanation": "저자는 이 Abstract에서 논문 전체의 핵심 주장을 매우 압축적으로, 그러나 전략적인 순서로 배치한다. 전체 구조는 \"기존 상황 → 제안 → 결과\"라는 고전적 3단 논증이지만, 각 문장에 담긴 단어 선택이 논문의 정체성을 규정한다.\n\n**기존 패러다임의 요약.** 저자는 첫 두 문장에서 당시 시퀀스 변환(sequence transduction) 분야의 지배적 구조를 정리한다. 순환 신경망(RNN)이나 합성곱 신경망(CNN) [[REF:rnn_lstm_gru]] [[REF:cnn_basics]]을 기반으로 인코더-디코더(encoder-decoder) [[REF:encoder_decoder]] 구조를 갖추고, 여기에 어텐션 메커니즘(attention mechanism) [[REF:attention_history]]을 연결하는 것이 \"최고 성능 모델\"의 공식이었다고 서술한다. 이 두 문장은 단순한 배경 설명이 아니라, 뒤에 나올 \"우리는 RNN과 CNN을 완전히 제거했다\"는 주장의 대비 효과를 극대화하기 위한 포석이다. 저자가 \"complex\"라는 형용사를 선택한 것도 주목할 만한데, 자신들의 모델을 곧 \"simple\"이라고 소개할 것이기 때문이다.\n\n**Transformer의 제안과 핵심 차별점.** 세 번째 문장이 논문의 중심 주장이다. 저자는 \"based solely on attention mechanisms, dispensing with recurrence and convolutions entirely\"라고 쓴다. 여기서 \"solely\"와 \"entirely\"라는 극단적 부사 두 개가 핵심이다. 기존 모델들이 어텐션을 RNN/CNN의 '보조 장치'로 사용했다면, 저자는 어텐션만으로 모델 전체를 구성할 수 있다고 주장하는 것이다. 이 문장 하나가 논문 제목 \"Attention Is All You Need\"의 학술적 표현이며, 순환(recurrence)과 합성곱(convolution)이라는 두 가지 연산 패러다임을 동시에 부정한다는 점에서 매우 도발적인 선언이다. 또한 저자가 자신의 모델을 \"simple\"이라고 명명한 것은, 앞서 기존 모델을 \"complex\"라고 규정한 것과 의도적으로 대조를 이루는 수사적 장치다.\n\n**실험 결과의 압축적 제시.** 마지막 문장에서 저자는 기계 번역(machine translation) 두 과제에서의 실험 결과를 세 가지 축으로 요약한다. 첫째 번역 품질(quality)에서 우수하고, 둘째 병렬화(parallelizable)가 더 용이하며, 셋째 학습 시간이 \"significantly less\"하다는 것이다. 이 세 가지 장점은 논문 본문의 실험 섹션에서 구체적 수치로 뒷받침되지만, Abstract에서는 의도적으로 수치를 생략하고 방향성만 제시한다. 특히 \"more parallelizable\"이라는 표현은 단순한 속도 개선이 아니라, RNN의 순차적 구조가 가진 근본적 병목을 해소했다는 구조적 주장을 함축하고 있다. 저자가 품질뿐 아니라 효율성을 동등한 비중으로 강조하는 것은, Transformer가 단지 더 좋은 모델이 아니라 더 실용적인 모델이기도 하다는 메시지를 전달하려는 의도이다.",
+  "prerequisites": [
+    "rnn_lstm_gru",
+    "cnn_basics",
+    "encoder_decoder",
+    "attention_history"
+  ],
+  "depth": 0,
+  "status": "done",
+  "is_leaf": true,
+  "children": []
+}

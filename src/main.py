@@ -251,6 +251,7 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
         max_children_per_node=config.part2.max_children_per_node,
         max_retries=config.verification.max_retries,
         on_node_done=lambda n: console.print(f"  [{n.status}] depth={n.depth} {n.concept}"),
+        use_cache=False,  # Phase 3: Part 2 는 논문 섹션이므로 중복 감지 불필요
     )
 
     from src.tree import ConceptNode

@@ -192,6 +192,7 @@ class Expander:
         max_children_per_node: int = 5,
         max_retries: int = 1,
         on_node_done: Callable[[ConceptNode], None] | None = None,
+        use_cache: bool = True,
     ):
         """트리 확장기를 초기화한다.
 
@@ -203,6 +204,7 @@ class Expander:
             max_children_per_node: 새 자식 생성 시 최대 개수.
             max_retries: 검증 실패 시 재시도 횟수 (0이면 재시도 없음).
             on_node_done: 노드 확장 완료 시 호출되는 콜백.
+            use_cache: 캐시 중복 체크 사용 여부. Phase 3 Part 2에서는 False.
         """
         self._client = client
         self._verifier = verifier
@@ -211,6 +213,7 @@ class Expander:
         self._max_children = max_children_per_node
         self._max_retries = max_retries
         self._on_node_done = on_node_done
+        self._use_cache = use_cache
 
     def expand(
         self, root: ConceptNode, ancestor_path: list[str] | None = None
@@ -238,21 +241,22 @@ class Expander:
         force_leaf = root.depth >= self._max_depth
 
         # 2. 조상 경로 순환 체크
-        if self._cache.check_ancestor_cycle(root.concept, ancestor_path):
+        if self._use_cache and self._cache.check_ancestor_cycle(root.concept, ancestor_path):
             root.status = "duplicate"
             root.duplicate_of = "ancestor-cycle"
             self._notify(root)
             return
 
         # 3. 캐시 중복 체크 (해시 + 임베딩)
-        dup_id = self._cache.lookup(
-            root.concept, brief=root.source_excerpt[:200]
-        )
-        if dup_id is not None:
-            root.status = "duplicate"
-            root.duplicate_of = dup_id
-            self._notify(root)
-            return
+        if self._use_cache:
+            dup_id = self._cache.lookup(
+                root.concept, brief=root.source_excerpt[:200]
+            )
+            if dup_id is not None:
+                root.status = "duplicate"
+                root.duplicate_of = dup_id
+                self._notify(root)
+                return
 
         # === Claude 호출 + 검증 루프 ===
         has_existing_children = len(root.children) > 0
@@ -327,7 +331,8 @@ class Expander:
             return  # 자식 확장 중단
 
         # === 캐시 등록 ===
-        self._cache.add(root.id, root.concept, brief=root.source_excerpt[:200])
+        if self._use_cache:
+            self._cache.add(root.id, root.concept, brief=root.source_excerpt[:200])
 
         # === 콜백 ===
         self._notify(root)

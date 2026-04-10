@@ -45,6 +45,7 @@ class Verification(BaseModel):
     
     max_retries: int = Field(default=1, ge=0, le=5)
     min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     check_types: list[CheckType]
 
 
@@ -95,6 +96,7 @@ class Part3Config(BaseModel):
     max_topics: int = 15
     subsections_per_topic: int = 6
     allow_claude_to_add: bool = True
+    use_curator: bool = True
     predefined_pool: list[PrerequisitePoolItem] = Field(default_factory=list)
 
 

@@ -216,6 +216,7 @@ def run_phase2_pipeline(args: argparse.Namespace, config, console: Console) -> N
     verifier = Verifier(
         client=client,
         min_confidence=config.verification.min_confidence,
+        sample_rate=config.verification.sample_rate,
     )
 
     def save_callback(node):
@@ -312,6 +313,7 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
     verifier = Verifier(
         client=client,
         min_confidence=config.verification.min_confidence,
+        sample_rate=config.verification.sample_rate,
     )
     expander = Expander(
         client=client,
@@ -374,13 +376,22 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
     # 5. Collect prerequisites
     console.print("[5/7] 기초 지식 주제 수집...")
-    topics = collect_prerequisites(
+    candidates = collect_prerequisites(
         part2_trees,
         config.part3.predefined_pool,
         allow_new=config.part3.allow_claude_to_add,
-        max_topics=config.part3.max_topics,
+        max_topics=1000,  # 큐레이션 전이라 컷 안 함
     )
-    console.print(f"       {len(topics)} 고유 주제")
+    console.print(f"       {len(candidates)} 후보 수집")
+
+    if config.part3.use_curator:
+        from src.prerequisite_curator import curate_prerequisites
+        console.print("       큐레이터로 선별 중...")
+        topics = curate_prerequisites(candidates, analysis, client)
+        console.print(f"       {len(topics)} 주제 선별됨 (가변)")
+    else:
+        topics = candidates[:config.part3.max_topics]
+        console.print(f"       {len(topics)} 주제 (max_topics 컷)")
 
     # 6. Write Part 3
     console.print("[6/7] Part 3 작성...")

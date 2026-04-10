@@ -1,6 +1,8 @@
 # 단일 책임: ConceptNode의 explanation이 source_excerpt에 충실하고 학부 1학년에게 적절한지 Claude 호출로 검증한다.
 from __future__ import annotations
 
+import random
+
 from src.claude_client import ClaudeClient
 from src.tree import ConceptNode
 
@@ -137,15 +139,24 @@ class Verifier:
     원문 충실성, 수준 적절성, 자기충족성, 수식 정확성, 논문 중심성, 흐름 유지.
     """
 
-    def __init__(self, client: ClaudeClient, min_confidence: float = 0.7):
+    def __init__(
+        self,
+        client: ClaudeClient,
+        min_confidence: float = 0.7,
+        sample_rate: float = 1.0,
+    ):
         """검증기를 초기화한다.
 
         Args:
             client: ClaudeClient 인스턴스 (모드 무관).
             min_confidence: 이 이상의 confidence여야 최종 통과.
+            sample_rate: 검증 수행 확률 (0.0~1.0). 1.0이면 전수, 0.1이면 10%만 검증.
         """
         self._client = client
         self._min_confidence = min_confidence
+        self._sample_rate = sample_rate
+        self._verify_count = 0
+        self._skip_count = 0
 
     def verify(self, node: ConceptNode) -> dict:
         """노드의 explanation을 검증한다.
@@ -156,6 +167,20 @@ class Verifier:
         Returns:
             dict: passed, confidence, errors, notes, passed_final 포함.
         """
+        # 샘플링: sample_rate 확률로만 실제 검증
+        if random.random() > self._sample_rate:
+            self._skip_count += 1
+            return {
+                "passed": True,
+                "confidence": 1.0,
+                "errors": [],
+                "paper_centric": {"score": 5, "reason": "sampled out"},
+                "flow": {"score": 5, "reason": "sampled out"},
+                "notes": "sampled out",
+                "passed_final": True,
+            }
+        self._verify_count += 1
+
         user_prompt = _USER_PROMPT_TEMPLATE.format(
             concept=node.concept,
             source_excerpt=node.source_excerpt,

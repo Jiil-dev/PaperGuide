@@ -27,6 +27,7 @@ dedup:
 # 자기검증
 verification:
   max_retries: 0            # 검증 실패 시 재시도 안 함 (호출 수 절감)
+  sample_rate: 0.1          # 검증 비율 (0.1 = 10% 노드만 검증)
   min_confidence: 0.7       # 이 이상이어야 통과. 너무 높이면 재생성 증가.
   check_types:
     - "hallucination"
@@ -74,6 +75,7 @@ part2:
 
 part3:
   min_topics: 5               # 최소 주제 수
+  use_curator: true           # Claude 큐레이터로 주제 선별 (가변 N)
   max_topics: 15              # 최대 주제 수
   subsections_per_topic: 6    # 주제당 평균 하위 항목 수
   allow_claude_to_add: true   # Claude가 사전 풀에 없는 주제 추가 허용

@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
+import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -69,6 +72,10 @@ class ClaudeClient:
         self._cache_misses = 0
         self._dry_run_calls = 0
 
+        # Thread safety
+        self._lock = threading.Lock()
+        self._rate_limit_exceeded = False
+
     # ------------------------------------------------------------------
     # 공개 API
     # ------------------------------------------------------------------
@@ -100,18 +107,20 @@ class ClaudeClient:
         else:  # live
             self._check_rate_limit()
             result = self._call_live(user_prompt, system_prompt, json_schema)
-            self._live_calls += 1
+            with self._lock:
+                self._live_calls += 1
             time.sleep(self._sleep)
             return result
 
     def get_stats(self) -> dict:
         """호출 통계를 반환한다."""
-        return {
-            "total_calls": self._live_calls,
-            "cache_hits": self._cache_hits,
-            "cache_misses": self._cache_misses,
-            "dry_run_calls": self._dry_run_calls,
-        }
+        with self._lock:
+            return {
+                "total_calls": self._live_calls,
+                "cache_hits": self._cache_hits,
+                "cache_misses": self._cache_misses,
+                "dry_run_calls": self._dry_run_calls,
+            }
 
     # ------------------------------------------------------------------
     # 모드별 내부 로직
@@ -120,7 +129,8 @@ class ClaudeClient:
     def _call_dry_run(self, json_schema: dict) -> dict:
         """schema에서 기본값을 생성한다."""
         result = self._generate_defaults(json_schema)
-        self._dry_run_calls += 1
+        with self._lock:
+            self._dry_run_calls += 1
         return result
 
     def _call_cached(
@@ -137,7 +147,8 @@ class ClaudeClient:
         if cache_path.exists():
             try:
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                self._cache_hits += 1
+                with self._lock:
+                    self._cache_hits += 1
                 return cached
             except (json.JSONDecodeError, OSError):
                 pass  # 손상된 캐시 → live 폴백
@@ -146,14 +157,12 @@ class ClaudeClient:
         self._check_rate_limit()
         result = self._call_live(user_prompt, system_prompt, json_schema)
 
-        # 캐시 저장
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # 캐시 저장 (atomic: temp + rename)
+        self._save_to_cache(cache_path, result)
 
-        self._cache_misses += 1
-        self._live_calls += 1
+        with self._lock:
+            self._cache_misses += 1
+            self._live_calls += 1
         time.sleep(self._sleep)
         return result
 
@@ -207,11 +216,30 @@ class ClaudeClient:
     # ------------------------------------------------------------------
 
     def _check_rate_limit(self) -> None:
-        """live 호출 상한을 체크한다."""
-        if self._live_calls >= self._max_total_calls:
-            raise RateLimitExceeded(
-                f"live 호출 상한 초과: {self._live_calls}/{self._max_total_calls}"
-            )
+        """live 호출 상한을 체크한다. thread-safe."""
+        with self._lock:
+            if self._rate_limit_exceeded or self._live_calls >= self._max_total_calls:
+                self._rate_limit_exceeded = True
+                raise RateLimitExceeded(
+                    f"live 호출 상한 초과: {self._live_calls}/{self._max_total_calls}"
+                )
+
+    def _save_to_cache(self, cache_path: Path, response: dict) -> None:
+        """캐시 파일을 atomic하게 저장 (temp + rename)."""
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(cache_path.parent), prefix=".cache_", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(response, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, str(cache_path))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
+            raise
 
     def _compute_cache_key(
         self, user_prompt: str, system_prompt: str, json_schema: dict

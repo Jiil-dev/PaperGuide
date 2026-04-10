@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from rich.console import Console
@@ -324,7 +325,11 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
     )
 
     from src.tree import ConceptNode
-    part2_trees = []
+    max_workers = config.claude.max_workers
+    console.print(f"       {len(sections)} 섹션, max_workers={max_workers}")
+
+    # 섹션별 root 노드 미리 생성
+    section_roots = []
     for section in sections:
         root = ConceptNode(
             concept=section.title,
@@ -332,14 +337,40 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
             depth=0,
             part=2,
         )
+        section_roots.append(root)
+
+    def _expand_one(idx_root):
+        idx, root = idx_root
         try:
             expander.expand(root)
-        except RateLimitExceeded as e:
-            console.print(f"[red]할당량 초과: {e}[/red]")
-            console.print("[yellow]현재까지 결과로 계속 진행합니다.[/yellow]")
-            break
-        part2_trees.append(root)
-    console.print(f"       {len(part2_trees)} 루트 노드")
+            return ("ok", idx, root)
+        except RateLimitExceeded:
+            return ("rate_limit", idx, root)
+        except Exception as e:
+            return ("error", idx, root, str(e))
+
+    completed = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_expand_one, (i, r)): i
+            for i, r in enumerate(section_roots)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            status, idx = result[0], result[1]
+            root = result[2]
+            if status == "ok":
+                completed[idx] = root
+                console.print(f"  [완료 {len(completed)}/{len(sections)}] {root.concept}")
+            elif status == "rate_limit":
+                console.print(f"  [rate limit] {root.concept}")
+            else:
+                info = result[3] if len(result) > 3 else ""
+                console.print(f"  [error] {root.concept}: {info}")
+
+    # 원래 순서 보존
+    part2_trees = [completed[i] for i in sorted(completed.keys())]
+    console.print(f"       {len(part2_trees)}/{len(sections)} 루트 노드 완료")
 
     # 5. Collect prerequisites
     console.print("[5/7] 기초 지식 주제 수집...")
@@ -353,20 +384,37 @@ def run_phase3_pipeline(args: argparse.Namespace, config, console: Console) -> N
 
     # 6. Write Part 3
     console.print("[6/7] Part 3 작성...")
-    part3_entries = []
-    for idx, topic in enumerate(topics, start=1):
-        section_num = f"3.{idx}"
+    console.print(f"       {len(topics)} 주제, max_workers={max_workers}")
+
+    def _write_one(idx_topic):
+        idx, topic = idx_topic
+        section_num = f"3.{idx + 1}"
         try:
             entry = write_part3_topic(topic, section_num, client)
-            part3_entries.append(entry)
-            console.print(f"  [done] {section_num} {topic.title}")
-        except RateLimitExceeded as e:
-            console.print(f"[red]할당량 초과: {e}[/red]")
-            console.print("[yellow]현재까지 결과로 계속 진행합니다.[/yellow]")
-            break
+            return ("ok", idx, entry, section_num, topic.title)
+        except RateLimitExceeded:
+            return ("rate_limit", idx, None, section_num, "")
         except Exception as e:
-            console.print(f"  [failed] {section_num} {topic.title}: {e}")
-    console.print(f"       {len(part3_entries)} 항목")
+            return ("error", idx, None, section_num, str(e))
+
+    p3_completed = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_write_one, (i, t)): i
+            for i, t in enumerate(topics)
+        }
+        for future in as_completed(futures):
+            status, idx, entry, section_num, info = future.result()
+            if status == "ok":
+                p3_completed[idx] = entry
+                console.print(f"  [done] {section_num} {info}")
+            elif status == "rate_limit":
+                console.print(f"  [rate limit] {section_num}")
+            else:
+                console.print(f"  [failed] {section_num}: {info}")
+
+    part3_entries = [p3_completed[i] for i in sorted(p3_completed.keys())]
+    console.print(f"       {len(part3_entries)}/{len(topics)} 항목 완료")
 
     # 7. Assemble
     console.print("[7/7] 3-Part 가이드북 조립...")

@@ -46,6 +46,7 @@ claude:
   max_total_calls: 1500     # Phase 3: 10~15x quota for 3-Part generation
   timeout_seconds: 600      # 단일 호출 타임아웃
   sleep_between_calls: 3    # 호출 간 대기(초). 속도 제한 완화.
+  max_workers: 3            # 병렬 처리 동시 호출 수 (1=순차)
 
 # 캐시 해시 정책 (claude_client.py가 참조)
 # 해시 입력: system_prompt + user_prompt + json.dumps(schema, sort_keys=True) + CLAUDE_CLIENT_VERSION

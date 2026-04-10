@@ -59,6 +59,7 @@ class Claude(BaseModel):
     max_total_calls: int = Field(default=500, ge=1)
     timeout_seconds: int = Field(default=600, ge=1)
     sleep_between_calls: int = Field(default=3, ge=0)
+    max_workers: int = Field(default=3, ge=1, le=10)
 
 
 class Part1Config(BaseModel):

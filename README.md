@@ -1,7 +1,5 @@
 # PaperGuide
 
-> Turn AI research papers into a complete Korean guidebook that an undergraduate freshman can read like a book.
-
 PaperGuide is a Python pipeline that transforms academic AI papers into comprehensive, top-down Korean explanations structured as a 3-part guidebook. Unlike typical paper summarizers, PaperGuide writes from the **author's perspective**, preserves the **flow of reading**, and treats prerequisite knowledge as **standalone deep explanations** rather than shallow inline definitions.
 
 **Built with Claude Code. Runs on Claude Code.** No Anthropic API key required — uses your existing Claude Max/Pro subscription via the `claude` CLI.
